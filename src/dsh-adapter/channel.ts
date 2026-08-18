@@ -21,7 +21,8 @@ import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { renderContextSections, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import { loadBaselineInstructions } from '@deepseek-ai/dsh-agent-instructions'
 import type { Context } from '@deepseek-ai/cordis'
-import type { Channel as PublicChannel } from '../tui-contract/channel.js'
+import type { Channel as PublicChannel, ResumeResult } from '../tui-contract/channel.js'
+export type { ResumeResult } from '../tui-contract/channel.js'
 import { extname, isAbsolute, join } from 'node:path'
 import { completeCommands, isLocalCommandName, LOCAL_COMMANDS, parseCommandName, type CommandCompletion, type CommandCompletionNode, type LocalCommand } from '../commands.js'
 import { clearResumeTarget, forgetSession, readResumeTarget, touchSession, writeResumeTarget } from '../sessionHistory.js'
@@ -570,7 +571,7 @@ export interface Channel {
    */
   promptRewind(row: ChatRow): Promise<{ modes: readonly TuiRewindMode[] } | 'cancel' | null>
   /** Switch the live agent to a persisted session, replaying its history. */
-  resumeTo(sessionId: string): Promise<boolean>
+  resumeTo(sessionId: string): Promise<ResumeResult>
   /** Start a fresh conversation (`/new`): a brand-new agent + session, the
    *  transcript cleared, the resume marker forgotten. */
   newSession(): Promise<boolean>
@@ -851,7 +852,7 @@ export interface ChannelState extends PublicChannel {
   /** @internal rewind decision prompt (see the public Channel.promptRewind). */
   promptRewind(row: ChatRow): Promise<{ modes: readonly TuiRewindMode[] } | 'cancel' | null>
   /** Switch the live agent to a persisted session, replaying its history. */
-  resumeTo(sessionId: string): Promise<boolean>
+  resumeTo(sessionId: string): Promise<ResumeResult>
   /** Start a fresh conversation (`/new`). */
   newSession(): Promise<boolean>
   listWorkspaces(): Promise<readonly WorkspaceTarget[]>
@@ -964,11 +965,26 @@ function preview(text: string, limit: number): string {
  * a loadOlder() restore is not instantly undone. Returns the number of rows
  * folded.
  */
-function foldRows(rows: ChatRow[], cap: number): number {
+function foldRows(
+  rows: ChatRow[],
+  cap: number,
+  cursor?: { rows: unknown; index: number },
+): number {
   const excess = rows.length - cap
-  if (excess <= 0) return 0
+  if (excess <= 0) {
+    if (cursor !== undefined) cursor.index = 0
+    return 0
+  }
+  // Incremental pass: rows only ever append past the fold line and the
+  // folded/restored exemptions are permanent, so everything below a cursor
+  // over the SAME array identity needs no re-inspection. emit/emitStream
+  // fold on every frame during streaming — a full rescan of a long window
+  // there was the O(rows) per-frame term of long-session streaming.
+  const from = cursor === undefined ? 0 : cursor.rows === rows ? cursor.index : 0
+  if (cursor !== undefined) cursor.rows = rows
+  if (excess <= from) return 0
   let folded = 0
-  for (const row of rows.slice(0, excess)) {
+  for (const row of rows.slice(from, excess)) {
     if (row.folded || row.restored) continue
     if (row.kind !== 'user' && row.kind !== 'assistant' && row.kind !== 'reasoning' && row.kind !== 'tool') continue
     row.folded = true
@@ -987,6 +1003,7 @@ function foldRows(rows: ChatRow[], cap: number): number {
       row.text = preview(row.text, 200)
     }
   }
+  if (cursor !== undefined) cursor.index = excess
   return folded
 }
 
@@ -1311,6 +1328,9 @@ export function createChannel(
   }
   /** True while a frame-aligned stream notification is pending (emitStream). */
   let streamNotifyScheduled = false
+  // foldRows incremental cursor (see foldRows): rows only append past the
+  // fold line, so each pass touches only newly-eligible rows.
+  const foldCursor: { rows: unknown; index: number } = { rows: null, index: 0 }
   let nextNotificationId = 1
   /** One-shot context-low warning per session (CC's TokenWarning). */
   let contextWarned = false
@@ -1932,7 +1952,7 @@ export function createChannel(
       }
     },
     emit() {
-      foldRows(state.rows, MAX_ROWS)
+      foldRows(state.rows, MAX_ROWS, foldCursor)
       state.version += 1
       for (const listener of listeners) listener()
     },
@@ -1948,7 +1968,7 @@ export function createChannel(
       streamNotifyScheduled = true
       const timer = setTimeout(() => {
         streamNotifyScheduled = false
-        foldRows(state.rows, MAX_ROWS)
+        foldRows(state.rows, MAX_ROWS, foldCursor)
         for (const listener of listeners) listener()
       }, 16)
       // Never hold the process open for a pending UI wakeup.
@@ -2288,13 +2308,13 @@ export function createChannel(
       notifySessionSwitched('rewind', String(childId), sourceSessionId)
       return row.text
     },
-    async resumeTo(sessionId: string): Promise<boolean> {
+    async resumeTo(sessionId: string): Promise<ResumeResult> {
       // Switch the live agent to a persisted session: /resume picker Enter
       // loads the history immediately (the `--resume` launcher path keeps
       // resolving through DSH_TUI_RESUME_SESSION at boot).
       if (state.working) {
         state.notify(t('resume-while-working'), { color: 'warning' })
-        return false
+        return { ok: false, reason: 'working' }
       }
       const agents = ctx.get('agents') as
         | {
@@ -2307,12 +2327,12 @@ export function createChannel(
         | undefined
       if (!agents) {
         state.notify(t('resume-unavailable'), { color: 'error' })
-        return false
+        return { ok: false, reason: 'unavailable' }
       }
       // Plugin veto point (tui/session-switch): before any read of the
       // target — a veto leaves the live session and its transcript
       // untouched.
-      if (await sessionSwitchVetoed('resume', sessionId)) return false
+      if (await sessionSwitchVetoed('resume', sessionId)) return { ok: false, reason: 'cancelled' }
       let handle: AgentHandle
       // Compat boundary: register vouched-for legacy event types (e.g.
       // activity/status from pre-#143 logs) in every reachable dsh-session
@@ -2345,7 +2365,7 @@ export function createChannel(
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         state.notify(t('resume-failed', { err: message }), { color: 'error', timeoutMs: 8000 })
-        return false
+        return { ok: false, reason: 'failed', error: message }
       }
       try {
         // `/resume` is an explicit adoption of this persisted conversation.
@@ -2433,7 +2453,7 @@ export function createChannel(
       void oldHandle?.dispose().catch(() => {})
       clearStagedImages()
       notifySessionSwitched('resume', sessionId, previousSessionId)
-      return true
+      return { ok: true }
     },
     async newSession(): Promise<boolean> {
       // `/new` — start a fresh conversation: brand-new agent + session, the
@@ -4899,11 +4919,12 @@ function usageOutputTokens(usage: unknown): number | undefined {
 }
 
 /**
- * Recursive `@` file listing through the leaf's fs service (dsh-fs-local):
- * walks up to MAX_DEPTH levels below `root`, skipping VCS/dependency dirs,
- * returning relative paths (directories with a trailing `/`, matching the
- * FileSuggestions tag logic) capped at MAX_FILES entries. Best-effort —
- * unreadable subtrees are skipped, not fatal.
+ * `@` file listing through the leaf's fs service (dsh-fs-local): skips
+ * VCS/dependency/build dirs and rotates across directory listings so one
+ * large subtree cannot consume the global MAX_FILES budget. That budget also
+ * bounds directory reads without imposing an arbitrary source-tree depth.
+ * Relative directories retain the trailing `/` that FileSuggestions expects.
+ * Unreadable subtrees are skipped, not fatal.
  */
 async function listFilesDeep(
   fs: {
@@ -4920,38 +4941,58 @@ async function listFilesDeep(
 ): Promise<string[]> {
   if (!fs) return []
   const out: string[] = []
-  const SKIP = new Set(['node_modules', '.git', '.hg', '.svn', '.DS_Store', 'dist', 'build'])
-  const MAX_DEPTH = 3
+  const SKIP = new Set(['node_modules', '.git', '.hg', '.svn', '.DS_Store', 'dist'])
+  const BUILD_DIR = /^(?:build(?:[-_].*)?|cmake-build(?:[-_].*)?)$/i
   const MAX_FILES = 100
 
-  const walk = async (dir: string, prefix: string, depth: number): Promise<void> => {
-    if (depth > MAX_DEPTH || out.length >= MAX_FILES) return
-    let entries: Array<{
-      name: string
-      type: 'file' | 'directory' | 'other'
-      target: { displayPath: string }
-    }> = []
-    try {
-      const target = await fs.resolve(dir)
-      entries = await fs.listDir(target)
-    } catch {
-      return // unreadable subtree — skip
-    }
-    for (const entry of entries) {
-      if (out.length >= MAX_FILES) return
-      if (SKIP.has(entry.name)) continue
-      const rel = prefix ? `${prefix}/${entry.name}` : entry.name
-      if (entry.type === 'directory') {
-        out.push(`${rel}/`)
-        // oxlint-disable-next-line typescript/no-unnecessary-condition -- runtime guard: symlink targets optional
-        await walk(entry.target?.displayPath ?? join(dir, entry.name), rel, depth + 1)
-      } else if (entry.type === 'file') {
-        out.push(rel)
+  type Entry = {
+    name: string
+    type: 'file' | 'directory' | 'other'
+    target: { displayPath: string }
+  }
+  type Directory = {
+    dir: string
+    prefix: string
+    entries?: Entry[]
+    index: number
+  }
+  const directories: Directory[] = [{ dir: root, prefix: '', index: 0 }]
+
+  while (directories.length > 0 && out.length < MAX_FILES) {
+    const current = directories.shift()
+    if (!current) continue
+    if (!current.entries) {
+      try {
+        const target = await fs.resolve(current.dir)
+        current.entries = await fs.listDir(target)
+      } catch {
+        continue // unreadable subtree — skip
       }
     }
-  }
 
-  await walk(root, '', 1)
+    let entry: Entry | undefined
+    while (current.index < current.entries.length) {
+      const candidate = current.entries[current.index++]
+      if (SKIP.has(candidate.name) || BUILD_DIR.test(candidate.name)) continue
+      entry = candidate
+      break
+    }
+    if (!entry) continue
+    if (current.index < current.entries.length) directories.push(current)
+
+    const rel = current.prefix ? `${current.prefix}/${entry.name}` : entry.name
+    if (entry.type === 'directory') {
+      out.push(`${rel}/`)
+      directories.push({
+        // oxlint-disable-next-line typescript/no-unnecessary-condition -- runtime guard: symlink targets optional
+        dir: entry.target?.displayPath ?? join(current.dir, entry.name),
+        prefix: rel,
+        index: 0,
+      })
+    } else if (entry.type === 'file') {
+      out.push(rel)
+    }
+  }
   return out
 }
 

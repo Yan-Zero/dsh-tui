@@ -363,15 +363,9 @@ export function Chat({
   /**
    * Close the scene.
    *
-   * Leaving the alternate screen makes the terminal restore the main buffer
-   * itself; Ink then repaints once, because `setAltScreenActive(false)` blanks
-   * its front frame. In inline mode that costs one frame of scrollback per
-   * round trip — the same, already-accepted cost as the Ctrl+X external-editor
-   * handoff, and bounded per OPEN rather than per keystroke. Making it zero
-   * needs the render core to save and restore the pre-alt front frame, which
-   * is a separate change to `setAltScreenActive` and deliberately not made
-   * here. `verify-trace-scene` pins the property that matters meanwhile:
-   * navigating inside the scene adds nothing at all.
+   * Leaving the alternate screen makes the terminal restore the main buffer;
+   * Ink restores the matching saved frame and diffs any conversation changes
+   * that happened while the scene was open.
    */
   const closeScene = React.useCallback(() => {
     setSceneOpen(false)
@@ -711,7 +705,8 @@ export function Chat({
       case 'lang': {
         // `/lang` shows the current UI language, `/lang en|zh` switches
         // (hot-swap, persisted to ~/.dsh-tui/lang.json). Precedence on next
-        // launch: DSH_TUI_LANG > cordis.yml `lang` > the persisted choice.
+        // launch: DSH_TUI_LANG > settings.yaml `dsh-tui.lang` > cordis.yml
+        // `lang` > the persisted choice.
         const parts = rawInput.trim().split(/\s+/).filter(Boolean)
         if (parts[0] === 'status') {
           setHelpOpen(false)
@@ -727,6 +722,16 @@ export function Chat({
           if (isLang(parts[0])) {
             const ok = writeLangPref(parts[0])
             setLang(parts[0])
+            // Mirror into the dsh-tui settings namespace when it is served,
+            // so /settings and the next boot see the same last-write-wins
+            // choice (best effort; lang.json stays the fallback).
+            const settingsHost = channel.settingsHost()
+            const tuiView = settingsHost?.listNamespaces().find(entry => entry.ns === 'dsh-tui')
+            if (settingsHost !== undefined && tuiView !== undefined) {
+              void settingsHost
+                .write('dsh-tui', [{ op: 'set', path: ['lang'], value: parts[0] }], tuiView.revision)
+                .catch(() => {})
+            }
             channel.notify(
               ok ? t('lang-switched', { lang: parts[0] }) : t('lang-switch-failed', { lang: parts[0] }),
               { color: ok ? 'success' : 'error' },

@@ -266,6 +266,14 @@ type StreamingLineSlot = {
 type EscapeTailState = 'none' | 'complete' | 'dangling' | 'bare'
 
 /**
+ * Slot-reuse ceiling: the clustered array is a second full memory image of
+ * the line, and pathological single-line output (base64 blobs, minified
+ * code) would pin it across frames on top of the string itself. Past this
+ * length every frame takes the full path — transient, GC-able.
+ */
+const STREAMING_SLOT_MAX_LINE = 65_536
+
+/**
  * Classify the tail of the line relative to its LAST ESC character.
  * - 'none': no ESC at all
  * - 'dangling': the last ESC starts an escape sequence that is cut off at
@@ -336,6 +344,7 @@ function updateStreamingSlot(
 ): void {
   if (
     line.length <= MAX_CACHEABLE_LINE ||
+    line.length > STREAMING_SLOT_MAX_LINE ||
     endsWithOpenGrapheme(line) ||
     hasRtlChars(line)
   ) {

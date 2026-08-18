@@ -100,7 +100,7 @@ TUI 启动后会在后台检查 npm 是否有新版本；发现更新时会提�
 
 | 键 | 功能 |
 |---|---|
-| `Enter` | 发送（`Shift+Enter` 换行）；命令菜单打开时执行选中项 |
+| `Enter` | 发送（`Shift+Enter` 换行，无法上报修饰键时可用 `Ctrl+J`）；命令菜单打开时执行选中项 |
 | `Ctrl+C` | 中断当前回合；空闲时连按两次退出 |
 | `Esc` | 关闭命令/文件菜单；空闲双击清空输入；**空输入双击 = 时间回溯** |
 | `Ctrl+O` | 展开/收起详情（思考全文、工具参数与输出） |
@@ -143,11 +143,25 @@ macOS 自带 Terminal.app 会自行消费 `⌘` 快捷键，请继续使用 `Ctr
 |---|---|
 | 会话 | `/new` 新会话 · `/resume` 会话浏览器（搜索、预览、跨项目、折叠子 agent 运行） · `/rename` 重命名会话 · `/workspace resume|rename|open` 管理工作区 · `/clear` 清屏 · `/compact` 压缩 · `/export` 导出 Markdown · `/trace` 轨迹场景（亦可 `Ctrl+T`） |
 | 状态 | `/context` 已加载上下文明细 · `/status` 会话信息 · `/cost` token 用量 · `/doctor` 环境自检 · `/config` 配置来源 · `/init` 创建 AGENTS.md |
-| 模型 | `/model` 选择器 · `/thinking` 思考显示 · `/tokens` token 明细 · `/theme` 主题选择器 · `/lang` 中英界面切换 |
+| 模型 | `/model` 选择器 · `/thinking` 思考显示 · `/tokens` token 明细 · `/theme` 主题选择器 · `/lang` 中英界面切换（`/settings` 中亦可选择） |
 | 账号/策略 | `/provider` 添加模型提供方 · `/login` 凭证状态 · `/logout` 登出说明 · `/permissions` 权限说明 · `/add-dir` 文件策略范围 · `/hooks` · `/mcp` |
 | 技能 | `/audit` 代码审计 · `/bug` bug 报告 · `/review` 代码评审 · `/practice` 编程练习 · `/pr_comments` PR 评论 · `/release-notes` 发布说明 · `/vuln-check` 漏洞检查 |
 | 其它 | `/agents` 子代理列表 · `/update` 自动更新并重启 · `/vim` · `/terminal-setup` · `/connect` · `/help` · `/exit` |
 | 注册表 | `/plan` `/goal`（DSH 命令注册表插件，随插件自动并入 `/` 菜单） |
+
+## 插件生态
+
+想为 dsh-TUI 做插件/扩展？欢迎加入生态！
+
+- **接口与兼容性协定**：[终端交互生态插件准入规范与实施标准](https://github.com/T-Auto/dsh-ecosystem-spec)
+- **插件开发指南**：[`docs/plugins.md`](docs/plugins.md)（接缝、契约、规范与验证清单）
+- **生态组织**：[dsh-tui-ecosystem](https://github.com/dsh-tui-ecosystem)（社区插件与模板的家）
+- **模板仓库**：[plugin-template](https://github.com/dsh-tui-ecosystem/plugin-template)（从模板起步，5 分钟出一个插件）
+- **参考实现**：`dsh-working-activity`（实时工作状态行：TUI 槽位 + `activity/status` 会话事件双出口）
+
+核心仓库不迁移、社区插件独立成仓。组织只维护收录列表与准入规范，不对社区插件
+的功能、质量或安全作背书或担保；插件作者对自己的仓库保持完全所有权，并自行承担
+维护与安全责任。
 
 ## 文档
 
@@ -256,18 +270,7 @@ pnpm smoke
 构建门禁。npm Git URL 安装通过 `prepare` 生成同一套运行时。渲染、问卷和工具卡
 改动还需运行对应回归脚本。
 
-## 插件生态
 
-想为 dsh-TUI 做插件/扩展？欢迎加入生态：
-
-- **插件开发指南**：[`docs/plugins.md`](docs/plugins.md)（接缝、契约、规范与验证清单）
-- **生态组织**：[dsh-tui-ecosystem](https://github.com/dsh-tui-ecosystem)（社区插件与模板的家）
-- **模板仓库**：[plugin-template](https://github.com/dsh-tui-ecosystem/plugin-template)（从模板起步，5 分钟出一个插件）
-- **参考实现**：`dsh-working-activity`（实时工作状态行：TUI 槽位 + `activity/status` 会话事件双出口）
-
-核心仓库不迁移、社区插件独立成仓。组织只维护收录列表与准入规范，不对社区插件
-的功能、质量或安全作背书或担保；插件作者对自己的仓库保持完全所有权，并自行承担
-维护与安全责任。
 
 ## 社区
 

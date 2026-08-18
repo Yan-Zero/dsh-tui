@@ -124,7 +124,11 @@ try {
   channel.cancel()
   equal(channel.interruptAndDeliver(['a', 'b']), 2, 'interruptAndDeliver prediction')
   equal(await channel.rewindTo({ id: 1, kind: 'user', text: 'rewind' }), 'rewound', 'rewindTo')
-  equal(await channel.resumeTo('session-2'), true, 'resumeTo')
+  equal((await channel.resumeTo('session-2')).ok, true, 'resumeTo')
+  const failedResume = await channel.resumeTo('session-failed')
+  equal(failedResume.ok, false, 'resumeTo failure projection')
+  equal(failedResume.ok ? undefined : failedResume.reason, 'failed', 'resumeTo failure reason')
+  equal(failedResume.ok || failedResume.reason !== 'failed' ? undefined : failedResume.error, 'remote resume failure', 'resumeTo failure detail')
   equal(await channel.newSession(), true, 'newSession')
   equal((await channel.listWorkspaces())[0]?.uri, 'file:///authority/workspace', 'listWorkspaces')
   equal((await channel.resolveWorkspace('/other'))?.cwd, '/other', 'resolveWorkspace')
@@ -298,7 +302,12 @@ function fakeChannel(cwd: string) {
     cancel: (...args: unknown[]) => record('cancel', args),
     interruptAndDeliver: (...args: unknown[]) => { record('interruptAndDeliver', args); return (args[0] as unknown[]).length },
     rewindTo: (...args: unknown[]) => { record('rewindTo', args); return Promise.resolve('rewound') },
-    resumeTo: (...args: unknown[]) => { record('resumeTo', args); return Promise.resolve(true) },
+    resumeTo: (...args: unknown[]) => {
+      record('resumeTo', args)
+      return Promise.resolve(args[0] === 'session-failed'
+        ? { ok: false, reason: 'failed', error: 'remote resume failure' }
+        : { ok: true })
+    },
     newSession: (...args: unknown[]) => { record('newSession', args); return Promise.resolve(true) },
     listWorkspaces: (...args: unknown[]) => { record('listWorkspaces', args); return Promise.resolve([{ kind: 'local', uri: 'file:///authority/workspace', cwd: '/authority/workspace', label: 'authority' }]) },
     resolveWorkspace: (reference: string) => { record('resolveWorkspace', [reference]); return Promise.resolve(reference === 'missing' ? undefined : { kind: 'local', uri: `file://${reference}`, cwd: reference, label: reference }) },

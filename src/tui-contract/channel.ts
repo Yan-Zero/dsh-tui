@@ -139,6 +139,14 @@ export interface PendingMessage { id: string; text: string; placement: 'steer' |
 export interface EffortOption { id: string; name: string; description?: string }
 export interface ChannelRewindMode { id: string; label: string; description?: string }
 
+/** The observable outcome of adopting a persisted session. */
+export type ResumeResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: 'working' }
+  | { readonly ok: false; readonly reason: 'unavailable' }
+  | { readonly ok: false; readonly reason: 'cancelled' }
+  | { readonly ok: false; readonly reason: 'failed'; readonly error: string }
+
 export interface Channel {
   readonly version: number
   readonly rows: readonly ChatRow[]
@@ -192,7 +200,7 @@ export interface Channel {
   interruptAndDeliver(texts: readonly string[]): number
   promptRewind(row: ChatRow): Promise<{ modes: readonly ChannelRewindMode[] } | 'cancel' | null>
   rewindTo(row: ChatRow, mode?: string | null): Promise<string | null>
-  resumeTo(sessionId: string): Promise<boolean>
+  resumeTo(sessionId: string): Promise<ResumeResult>
   newSession(): Promise<boolean>
   listWorkspaces(): Promise<readonly WorkspaceTarget[]>
   resolveWorkspace(reference: string): Promise<WorkspaceTarget | undefined>

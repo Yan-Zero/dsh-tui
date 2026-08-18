@@ -637,7 +637,7 @@ await sleep(800)
   const switched = await channel.newSession()
   check('compact ABA setup: /new succeeded mid-await', switched === true)
   const resumed = await channel.resumeTo('s-a1')
-  check('compact ABA setup: /resume back to the origin session succeeded', resumed === true)
+  check('compact ABA setup: /resume back to the origin session succeeded', resumed.ok === true)
   release(undefined)
   await sleep(400)
   check('compact ABA: id reuse does NOT revive the stale compaction',
@@ -661,7 +661,7 @@ await sleep(800)
   check('switch stale setup: a second /new completed mid-await', switched === true)
   release(undefined)
   const resumed = await resumePromise
-  check('session-switch stale: the parked /resume is dropped', resumed === false)
+  check('session-switch stale: the parked /resume is dropped', !resumed.ok && resumed.reason === 'cancelled')
   check('session-switch stale: stale notice toasted', notified('等待插件期间会话已切换'))
   dispose()
 }
