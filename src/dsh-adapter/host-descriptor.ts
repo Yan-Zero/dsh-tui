@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { ContractCoordinate, HostContract, HostDescriptor } from '../plugin-spec/types.js'
 import { digestFile, loadSpecData } from '../plugin-spec/registry.js'
-import { TUI_DECISION_EVENT_NAMES } from '../plugin-spec/tui-extension.js'
+import { DECISION_EVENTS_COORDINATE, TUI_DECISION_EVENT_NAMES } from '../plugin-spec/tui-extension.js'
 import { createContractIndex, validateHost } from '../plugin-spec/validate.js'
 import { check } from '../plugin-spec/schema-check.js'
 
@@ -13,7 +13,7 @@ export const HOST_SUPPORTED_CONTRACTS: readonly ContractCoordinate[] = Object.fr
   { apiVersion: 'commands.dsh/v1alpha1', kind: 'Command' },
   { apiVersion: 'storage.dsh/v1alpha1', kind: 'LocalStorage' },
   { apiVersion: 'messages.dsh/v1alpha1', kind: 'MessageObserver' },
-  { apiVersion: 'tui.dsh/v1alpha1', kind: 'DecisionEvents' },
+  DECISION_EVENTS_COORDINATE,
 ])
 
 /** The facet version is part of the host identity, not a protocol definition.
@@ -65,7 +65,8 @@ export function readOwnPackageVersion(): string {
 }
 
 function supportSpec(coordinate: ContractCoordinate): unknown {
-  if (coordinate.apiVersion === 'tui.dsh/v1alpha1' && coordinate.kind === 'DecisionEvents') {
+  if (coordinate.apiVersion === DECISION_EVENTS_COORDINATE.apiVersion
+    && coordinate.kind === DECISION_EVENTS_COORDINATE.kind) {
     return { features: [...TUI_DECISION_EVENT_NAMES] }
   }
   return undefined

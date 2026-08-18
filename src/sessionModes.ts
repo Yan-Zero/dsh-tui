@@ -5,7 +5,7 @@
  * session events), approval policy (dsh-user-approval `approval/policy`
  * events). An absent atom means "this mode does not touch that plane".
  */
-import { t } from './i18n.js'
+import { t, type I18nKey } from './i18n.js'
 
 export interface SessionModeSpec {
   /** Stable id; also the display name unless `label` is set or the id is a
@@ -50,10 +50,13 @@ export function resolveSessionModes(raw: readonly SessionModeSpec[] | undefined)
 
 /** Display name: explicit `label` > built-in i18n (`mode-default`/
  *  `mode-plan`/`mode-full` for those ids) > the raw id. */
-export function modeDisplayName(spec: SessionModeSpec): string {
+export function modeDisplayName(
+  spec: SessionModeSpec,
+  localize: (key: I18nKey) => string = t,
+): string {
   if (spec.label !== undefined) return spec.label
-  if (spec.id === 'default') return t('mode-default')
-  if (spec.id === 'plan') return t('mode-plan')
-  if (spec.id === 'full') return t('mode-full')
+  if (spec.id === 'default') return localize('mode-default')
+  if (spec.id === 'plan') return localize('mode-plan')
+  if (spec.id === 'full') return localize('mode-full')
   return spec.id
 }

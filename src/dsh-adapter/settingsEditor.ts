@@ -17,41 +17,9 @@
  * translates between drafts and `mutate` path ops.
  */
 
-import type { TuiSettingsField, TuiSettingsFieldWrite } from './settings-sections.js'
-
-/** One settings namespace as the screen reads it (secrets redacted). */
-export interface SettingsNamespaceView {
-  readonly ns: string
-  /** Monotonic revision of the raw user section; fences writes. */
-  readonly revision: number
-  /** 'live' applies immediately; 'restart' needs a relaunch. */
-  readonly applies: 'live' | 'restart'
-  /** Current resolved value (all layers composed). */
-  readonly value: unknown
-  /** Raw user layer; a path present here is a user override. */
-  readonly user: unknown
-}
-
-/**
- * Runtime capabilities the settings screen needs, implemented by the channel
- * over the dsh `settings` / `credentials` seams. `undefined` from
- * `channel.settingsHost()` means the composition lacks them (bare cordis.yml
- * start) and the screen shows namespaces read-only.
- */
-export interface SettingsHost {
-  /** Every registered namespace, secrets redacted, in registration order. */
-  listNamespaces(): readonly SettingsNamespaceView[]
-  /** Write path ops against a namespace, fenced by its current revision. */
-  write(ns: string, ops: readonly SettingsPathOp[], expectedRevision?: number): Promise<void>
-  /** Whether any layer supplies a credential under `ref`. */
-  credentialConfigured(ref: string): Promise<boolean>
-  /** Persist a credential; rejects when env-shadowed or the store is read-only. */
-  writeCredential(ref: string, value: string): Promise<void>
-}
-
-export type SettingsPathOp =
-  | { op: 'set'; path: readonly string[]; value: unknown }
-  | { op: 'unset'; path: readonly string[] }
+import type { TuiSettingsField, TuiSettingsFieldWrite } from '../tui-runtime/settings-sections.js'
+import type { SettingsHost, SettingsNamespaceView, SettingsPathOp } from '../tui-contract/settings.js'
+export type { SettingsHost, SettingsNamespaceView, SettingsPathOp } from '../tui-contract/settings.js'
 
 /** One field as the screen renders it. */
 export interface SettingsFieldState {

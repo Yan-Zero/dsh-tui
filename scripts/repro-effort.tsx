@@ -101,7 +101,7 @@ await (agentCtx as Context).waterfall(
 const seed = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
 const proposed = (await (agentCtx as Context).waterfall(
   'agent/request' as never,
-  { turn: 1, step: 1, signal: new AbortController().signal },
+  { agent, turn: 1, step: 1, signal: new AbortController().signal },
   () => Promise.resolve(seed),
 )) as { reasoningEffort?: string }
 
@@ -148,7 +148,7 @@ await sleep(50)
 const seed2 = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
 const proposed2 = (await (agentCtx2 as Context).waterfall(
   'agent/request' as never,
-  { turn: 1, step: 1, signal: new AbortController().signal },
+  { agent: agent2, turn: 1, step: 1, signal: new AbortController().signal },
   () => Promise.resolve(seed2),
 )) as { reasoningEffort?: string }
 check(

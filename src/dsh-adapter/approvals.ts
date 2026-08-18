@@ -46,13 +46,12 @@ const COMMAND_CLIP = 500
  * @returns The `command` argument when present, else the raw arguments
  *   string (clipped), else undefined when the call cannot be found.
  */
-function commandOf(req: ApprovalRequest): string | undefined {
-  if (req.callId === undefined) return undefined
-  const events = req.agent.session.events
+export function approvalCommandOf(callId: ApprovalRequest['callId'], events: readonly SessionEvent[]): string | undefined {
+  if (callId === undefined) return undefined
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event: SessionEvent = events[i]!
     if (event.type !== 'tool/call') continue
-    if (String(event.data.callId) !== String(req.callId)) continue
+    if (String(event.data.callId) !== String(callId)) continue
     const raw = event.data.arguments
     try {
       const parsed: unknown = JSON.parse(raw)
@@ -125,8 +124,26 @@ export class ApprovalStore {
    *   when the ask is withdrawn or the plugin tears down.
    */
   park(req: ApprovalRequest): Promise<ApprovalOutcome> {
+    return this.parkExternal({
+      toolName: req.toolName,
+      events: req.agent.session.events,
+      ...(req.callId === undefined ? {} : { callId: req.callId }),
+      ...(req.reason === undefined ? {} : { reason: req.reason }),
+      ...(req.signal === undefined ? {} : { signal: req.signal }),
+    })
+  }
+
+  /** Backend-neutral answerer entry point for a remotely owned Agent. */
+  parkExternal(req: {
+    toolName: string
+    callId?: ApprovalRequest['callId']
+    reason?: string
+    command?: string
+    signal?: AbortSignal
+    events: readonly SessionEvent[]
+  }): Promise<ApprovalOutcome> {
     return new Promise<ApprovalOutcome>(resolve => {
-      const command = commandOf(req)
+      const command = req.command ?? approvalCommandOf(req.callId, req.events)
       const pending: PendingApproval = {
         key: String(++this.seq),
         snapshot: {

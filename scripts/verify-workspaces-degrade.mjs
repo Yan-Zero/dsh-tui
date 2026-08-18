@@ -19,7 +19,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createLocalWorkspaceRuntime } from '../lib/types/dsh-adapter/workspaces.js'
+import { createLocalWorkspaceRuntime } from '../lib/types/tui-runtime/workspaces.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = rel => readFileSync(join(root, rel), 'utf8')

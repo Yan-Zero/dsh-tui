@@ -5,14 +5,12 @@ import * as tuiKit from '../ui.js'
 import { POINTER } from '../cc/figures.js'
 import { isMod, isPlainReturnInput, modLabel } from '../utils/modifiers.js'
 import { formatTokens } from '../cc/format.js'
-import { homeDir } from '../utils/paths.js'
-import type { LlmModelInfo } from '../dsh-adapter/types.js'
-import { sessionCwdMatches, type Channel, type ChatRow, type EffortOption, type PresetOption, type SkillInfo } from '../dsh-adapter/channel.js'
+import { sessionCwdMatches, type Channel, type ChannelEvent, type ChannelModelInfo, type ChannelRewindMode, type ChatRow, type EffortOption, type PresetOption, type SkillInfo } from '../tui-contract/channel.js'
+import type { TuiBackendCommandRequest } from '../tui-runtime/backends.js'
 import type { QuestionStore } from '../dsh-adapter/questions.js'
 import { TuiDialogStore } from '../dsh-adapter/dialogs.js'
 import { TuiStatusStore } from '../dsh-adapter/status.js'
 import type { TuiShortcutRuntime } from '../dsh-adapter/shortcuts.js'
-import type { TuiRewindMode } from '../dsh-adapter/extension-events.js'
 import { runProviderWizard } from '../dsh-adapter/providerWizard.js'
 import { ApprovalStore } from '../dsh-adapter/approvals.js'
 import { AskUserQuestionPanel } from '../components/questions/AskUserQuestionPanel.js'
@@ -40,7 +38,7 @@ import { SessionBrowser } from './SessionBrowser.js'
 import { Settings } from './Settings.js'
 import { WorkspacePicker } from '../components/WorkspacePicker.js'
 import { WorkspaceFlowPicker } from '../components/WorkspaceFlowPicker.js'
-import type { TuiWorkspaceCommandResult, TuiWorkspaceTarget } from '../workspaces.js'
+import type { WorkspaceCommandResult, WorkspaceProgress, WorkspaceTarget } from '../tui-contract/workspaces.js'
 import { ActivityPicker } from '../components/ActivityPicker.js'
 import { EffortSlider } from '../components/EffortSlider.js'
 import { PresetPicker } from '../components/PresetPicker.js'
@@ -58,14 +56,13 @@ import { TrajectoryScene } from './TrajectoryScene.js'
 import { extendTrajectory, projectWave, type TrajBuild } from '../dsh-adapter/trajectory/index.js'
 import { miniWakeWidth } from '../components/trajectory/MiniWake.js'
 import { readTrajectorySeen, writeTrajectorySeen } from '../trajectoryPrefs.js'
-import type { SessionEvent } from '../dsh-adapter/types.js'
 import { LoadingState } from '../components/design-system/LoadingState.js'
 import { Pane } from '../components/design-system/Pane.js'
 import { loadHistory, type HistoryEntry } from '../history.js'
 import { formatLoadedContextReport } from '../utils/loaded-context.js'
 
 /** Shared empty snapshot for hosts whose channel has no event log. */
-const NO_EVENTS: readonly SessionEvent[] = []
+const NO_EVENTS: readonly ChannelEvent[] = []
 
 /** Row kinds the message-selection cursor can land on. */
 const SELECTABLE_KINDS = new Set<ChatRow['kind']>([
@@ -157,6 +154,7 @@ export function Chat({
   extensionDialogs,
   extensionStatus,
   extensionShortcuts,
+  onBackendCommand,
   onExit,
   onUpdate,
   fullscreen = false,
@@ -180,6 +178,8 @@ export function Chat({
   extensionStatus?: TuiStatusStore
   /** Plugin keyboard shortcut registry (tuiShortcuts service). */
   extensionShortcuts?: TuiShortcutRuntime
+  /** Backend command middleware. It is absent in a standalone local TUI. */
+  onBackendCommand?: (request: TuiBackendCommandRequest) => boolean
   onExit: () => void
   /** Update the installed package and restart the current TUI process. */
   onUpdate?: () => void
@@ -270,7 +270,7 @@ export function Chat({
     () => new Set(),
   )
   const [modelPickerOpen, setModelPickerOpen] = React.useState(false)
-  const [models, setModels] = React.useState<readonly LlmModelInfo[]>([])
+  const [models, setModels] = React.useState<readonly ChannelModelInfo[]>([])
   const [modelIndex, setModelIndex] = React.useState(0)
   /** `/skills` 技能目录（issue #204）：null = 注册表快照在途。 */
   const [skillsPickerOpen, setSkillsPickerOpen] = React.useState(false)
@@ -284,11 +284,12 @@ export function Chat({
    *  drafts and keyboard; Chat only opens it. */
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const [workspacePickerOpen, setWorkspacePickerOpen] = React.useState(false)
-  const [workspaceTargets, setWorkspaceTargets] = React.useState<readonly TuiWorkspaceTarget[]>([])
+  const [workspaceTargets, setWorkspaceTargets] = React.useState<readonly WorkspaceTarget[]>([])
   const [workspaceIndex, setWorkspaceIndex] = React.useState(0)
-  const [workspaceFlow, setWorkspaceFlow] = React.useState<Extract<TuiWorkspaceCommandResult, { kind: 'choices' }> | null>(null)
+  const [workspaceFlow, setWorkspaceFlow] = React.useState<Extract<WorkspaceCommandResult, { kind: 'choices' }> | null>(null)
   const [workspaceFlowIndex, setWorkspaceFlowIndex] = React.useState(0)
   const [workspaceFlowBusy, setWorkspaceFlowBusy] = React.useState(false)
+  const [workspaceFlowProgress, setWorkspaceFlowProgress] = React.useState<WorkspaceProgress | null>(null)
   const [workspaceFlowInput, setWorkspaceFlowInput] = React.useState<{
     choiceId: string
     value: string
@@ -332,7 +333,7 @@ export function Chat({
   const [rewindConfirm, setRewindConfirm] = React.useState<ChatRow | null>(null)
   /** Plugin rewind modes (tui/rewind-prompt seam): extra choices offered in
    *  the confirm pane; null = the plain conversation-only confirm. */
-  const [rewindModes, setRewindModes] = React.useState<readonly TuiRewindMode[] | null>(null)
+  const [rewindModes, setRewindModes] = React.useState<readonly ChannelRewindMode[] | null>(null)
   const [rewindModeIndex, setRewindModeIndex] = React.useState(0)
   /** True while the tui/rewind-prompt decision is in flight (a plugin may be
    *  showing its own dialog); keys except Esc are swallowed meanwhile. */
@@ -497,9 +498,10 @@ export function Chat({
     `${titlePrefix} 🐋 ${channel.sessionTitle}`,
   )
 
-  const handleWorkspaceResult = (result: TuiWorkspaceCommandResult): void => {
+  const handleWorkspaceResult = (result: WorkspaceCommandResult): void => {
     workspaceFlowAbortRef.current = null
     setWorkspaceFlowBusy(false)
+    setWorkspaceFlowProgress(null)
     setWorkspaceFlowInput(null)
     if (result.kind === 'target') {
       setWorkspaceFlow(null)
@@ -516,14 +518,23 @@ export function Chat({
   }
 
   const runWorkspaceFlowAction = (
-    action: (signal: AbortSignal) => Promise<TuiWorkspaceCommandResult> | TuiWorkspaceCommandResult,
+    action: (
+      signal: AbortSignal,
+      reportProgress: (progress: WorkspaceProgress) => void,
+    ) => Promise<WorkspaceCommandResult> | WorkspaceCommandResult,
   ): void => {
     const request = ++workspaceFlowRequestRef.current
     const controller = new AbortController()
     workspaceFlowAbortRef.current = controller
     setWorkspaceFlowBusy(true)
+    setWorkspaceFlowProgress(null)
+    const reportProgress = (progress: WorkspaceProgress): void => {
+      if (request === workspaceFlowRequestRef.current && !controller.signal.aborted) {
+        setWorkspaceFlowProgress(progress)
+      }
+    }
     void Promise.resolve()
-      .then(() => action(controller.signal))
+      .then(() => action(controller.signal, reportProgress))
       .then((result) => {
         if (request === workspaceFlowRequestRef.current) handleWorkspaceResult(result)
       })
@@ -531,6 +542,7 @@ export function Chat({
         if (request !== workspaceFlowRequestRef.current) return
         workspaceFlowAbortRef.current = null
         setWorkspaceFlowBusy(false)
+        setWorkspaceFlowProgress(null)
         channel.notify(
           t('workspace-command-failed', { err: error instanceof Error ? error.message : String(error) }),
           { color: 'error', timeoutMs: 8000 },
@@ -578,6 +590,15 @@ export function Chat({
    * the command name (`/plan off` → ` off`).
    */
   const runCommand = (name: string, rawInput = ''): boolean => {
+    if (onBackendCommand?.({
+      channel,
+      name,
+      input: rawInput,
+      present: handleWorkspaceResult,
+    }) === true) {
+      setHelpOpen(false)
+      return true
+    }
     switch (name) {
       case 'activity': {
         // Ported from the pi working-activity extension: bare `/activity`
@@ -983,17 +1004,18 @@ export function Chat({
         setSettingsOpen(true)
         return true
       }
-      case 'config': {
-        const userHome = process.env.USERPROFILE ?? ''
-        const lines = [
-          t('doctor-example-config', { path: 'dsh --profile dsh-tui' }),
-          t('doctor-user-config', { path: `${userHome}/.dsh/profiles/dsh-tui/cordis.patch.yml` }),
-          '',
-          t('doctor-launch-hint'),
-          t('doctor-route-hint'),
-        ]
+      case 'scene': {
         setHelpOpen(false)
-        channel.pushLocal('/config', lines)
+        const id = rawInput.trim()
+        if (id.length === 0) channel.notify(t('scene-usage'))
+        else if (!channel.openPluginScene(id)) {
+          channel.notify(t('scene-not-found', { id }), { color: 'error' })
+        }
+        return true
+      }
+      case 'config': {
+        setHelpOpen(false)
+        channel.pushLocal('/config', channel.configInfo())
         return true
       }
       case 'doctor':
@@ -1005,23 +1027,33 @@ export function Chat({
         // grant matrix / ledger tail — or validate+negotiate for
         // `/plugins check <path>` (rawInput carries the subcommand).
         setHelpOpen(false)
-        channel.pushLocal('/plugins', channel.pluginsInfo(rawInput))
+        void Promise.resolve(channel.pluginsInfo(rawInput)).then(lines => {
+          channel.pushLocal('/plugins', lines)
+        }).catch((error: unknown) => {
+          channel.notify(error instanceof Error ? error.message : String(error), { color: 'error', timeoutMs: 8000 })
+        })
         return true
       case 'export': {
-        const target = channel.exportSession()
-        channel.notify(
-          target === null
-            ? t('export-failed')
-            : t('export-saved', { target }),
-          target === null ? { color: 'error', timeoutMs: 8000 } : { timeoutMs: 8000 },
-        )
+        void Promise.resolve(channel.exportSession()).then((target) => {
+          channel.notify(
+            target === null
+              ? t('export-failed')
+              : t('export-saved', { target }),
+            target === null ? { color: 'error', timeoutMs: 8000 } : { timeoutMs: 8000 },
+          )
+        }).catch((error: unknown) => {
+          channel.notify(error instanceof Error ? error.message : String(error), { color: 'error', timeoutMs: 8000 })
+        })
         return true
       }
       case 'init': {
-        const result = channel.initWorkspace()
-        if (result === null) channel.notify(t('agentsmd-create-failed'), { color: 'error' })
-        else if (result === 'exists') channel.notify(t('agentsmd-exists'))
-        else channel.notify(t('agentsmd-created', { result }))
+        void Promise.resolve(channel.initWorkspace()).then(result => {
+          if (result === null) channel.notify(t('agentsmd-create-failed'), { color: 'error' })
+          else if (result === 'exists') channel.notify(t('agentsmd-exists'))
+          else channel.notify(t('agentsmd-created', { result }))
+        }).catch((error: unknown) => {
+          channel.notify(error instanceof Error ? error.message : String(error), { color: 'error', timeoutMs: 8000 })
+        })
         return true
       }
       case 'agents':
@@ -1050,7 +1082,6 @@ export function Chat({
                       mode: t(status.writable ? 'login-storage-writable' : 'login-storage-read-only'),
                     }),
                   ]),
-              t('login-base-url', { url: process.env.DEEPSEEK_BASE_URL ?? t('login-official-endpoint') }),
             ])
           })
         return true
@@ -1538,6 +1569,7 @@ export function Chat({
         workspaceFlowAbortRef.current = null
         workspaceFlowRequestRef.current += 1
         setWorkspaceFlowBusy(false)
+        setWorkspaceFlowProgress(null)
         setWorkspaceFlow(null)
         return
       }
@@ -1550,7 +1582,7 @@ export function Chat({
           if (value.length === 0) {
             channel.notify(t('workspace-flow-input-empty'), { color: 'warning' })
           } else if (editor !== undefined) {
-            runWorkspaceFlowAction(signal => editor.submit(value, signal))
+            runWorkspaceFlowAction((signal, reportProgress) => editor.submit(value, signal, reportProgress))
           }
         } else if (key.backspace && workspaceFlowInput.cursor > 0) {
           setWorkspaceFlowInput(current => current === null ? null : {
@@ -1600,7 +1632,7 @@ export function Chat({
       } else if (plainReturn) {
         const choice = workspaceFlow.choices[workspaceFlowIndex]
         if (choice !== undefined) {
-          runWorkspaceFlowAction(signal => choice.choose(signal))
+          runWorkspaceFlowAction((signal, reportProgress) => choice.choose(signal, reportProgress))
         }
       }
       return
@@ -1974,8 +2006,13 @@ export function Chat({
     const browser = (
       <SessionBrowser
         channel={channel}
-        home={homeDir()}
-        sameProject={sessionCwdMatches}
+        home={channel.homeDir}
+        sameProject={(stateCwd, headerCwd) => sessionCwdMatches(
+          stateCwd,
+          headerCwd,
+          channel.pathCaseInsensitive,
+          channel.homeDir,
+        )}
         onClose={() => setBrowserOpen(false)}
       />
     )
@@ -2062,7 +2099,8 @@ export function Chat({
           showAll={showAllMessages}
           thinkingVisible={thinkingVisible}
           onToggleAll={() =>{  setShowAllMessages(previous => !previous) }}
-          onLoadOlder={() => channel.loadOlder()}
+          hasOlder={channel.hasOlder}
+          onLoadOlder={() => { void channel.loadOlder() }}
           registerRowRef={registerRowRef}
           scrollHandle={handle}
           forceMountRowId={forceMountRowId}
@@ -2221,6 +2259,7 @@ export function Chat({
                 choices={workspaceFlow.choices}
                 focusIndex={workspaceFlowIndex}
                 busy={workspaceFlowBusy}
+                progress={workspaceFlowProgress}
                 input={workspaceFlowInput}
               />
             </Box>

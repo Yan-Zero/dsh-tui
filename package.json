@@ -18,32 +18,60 @@
   "bin": {
     "dsh-tui": "./bin/dsh-tui.js"
   },
-  "main": "lib/types/index.js",
-  "types": "lib/types/index.d.ts",
+  "main": "lib/types/dsh-adapter/index.js",
+  "types": "lib/types/dsh-adapter/index.d.ts",
   "exports": {
     ".": {
-      "types": "./lib/types/index.d.ts",
-      "import": "./lib/types/index.js"
+      "types": "./lib/types/dsh-adapter/index.d.ts",
+      "import": "./lib/types/dsh-adapter/index.js"
     },
     "./working-activity": {
       "types": "./lib/types/working-activity.d.ts",
       "import": "./lib/types/working-activity.js"
     },
     "./workspaces": {
-      "types": "./lib/types/workspaces.d.ts",
-      "import": "./lib/types/workspaces.js"
+      "types": "./lib/types/tui-runtime/workspaces.d.ts",
+      "import": "./lib/types/tui-runtime/workspaces.js"
     },
     "./command-trees": {
-      "types": "./lib/types/command-trees.d.ts",
-      "import": "./lib/types/command-trees.js"
+      "types": "./lib/types/tui-runtime/command-trees.d.ts",
+      "import": "./lib/types/tui-runtime/command-trees.js"
+    },
+    "./backends": {
+      "types": "./lib/types/tui-runtime/backends.d.ts",
+      "import": "./lib/types/tui-runtime/backends.js"
+    },
+    "./channel-connection": {
+      "types": "./lib/types/std-adapter/channel-connection.d.ts",
+      "import": "./lib/types/std-adapter/channel-connection.js"
+    },
+    "./channel-provider": {
+      "types": "./lib/types/dsh-adapter/channel-provider.d.ts",
+      "import": "./lib/types/dsh-adapter/channel-provider.js"
+    },
+    "./channel-http": {
+      "types": "./lib/types/std-adapter/channel-http.d.ts",
+      "import": "./lib/types/std-adapter/channel-http.js"
+    },
+    "./channel-server": {
+      "types": "./lib/types/dsh-adapter/channel-server.d.ts",
+      "import": "./lib/types/dsh-adapter/channel-server.js"
+    },
+    "./launch": {
+      "types": "./lib/types/dsh-adapter/launch.d.ts",
+      "import": "./lib/types/dsh-adapter/launch.js"
+    },
+    "./direct-backend": {
+      "types": "./lib/types/std-adapter/direct-backend.d.ts",
+      "import": "./lib/types/std-adapter/direct-backend.js"
     },
     "./settings-sections": {
-      "types": "./lib/types/settings-sections.d.ts",
-      "import": "./lib/types/settings-sections.js"
+      "types": "./lib/types/tui-runtime/settings-sections.d.ts",
+      "import": "./lib/types/tui-runtime/settings-sections.js"
     },
     "./scenes": {
-      "types": "./lib/types/scenes.d.ts",
-      "import": "./lib/types/scenes.js"
+      "types": "./lib/types/tui-runtime/scenes.d.ts",
+      "import": "./lib/types/tui-runtime/scenes.js"
     },
     "./extensions": {
       "types": "./lib/types/extensions.d.ts",
@@ -56,6 +84,34 @@
     "./jsx-runtime": {
       "types": "./lib/types/jsx-runtime.d.ts",
       "import": "./lib/types/jsx-runtime.js"
+    },
+    "./channel": {
+      "types": "./lib/types/tui-contract/channel.d.ts",
+      "import": "./lib/types/tui-contract/channel.js"
+    },
+    "./provider-setup": {
+      "types": "./lib/types/tui-contract/provider-setup.d.ts",
+      "import": "./lib/types/tui-contract/provider-setup.js"
+    },
+    "./settings-editor": {
+      "types": "./lib/types/dsh-adapter/settingsEditor.d.ts",
+      "import": "./lib/types/dsh-adapter/settingsEditor.js"
+    },
+    "./standards": {
+      "types": "./lib/types/std-adapter/standards.d.ts",
+      "import": "./lib/types/std-adapter/standards.js"
+    },
+    "./ui-host": {
+      "types": "./lib/types/std-adapter/ui-host.d.ts",
+      "import": "./lib/types/std-adapter/ui-host.js"
+    },
+    "./presentation-participant": {
+      "types": "./lib/types/std-adapter/presentation-participant.d.ts",
+      "import": "./lib/types/std-adapter/presentation-participant.js"
+    },
+    "./component-loader": {
+      "types": "./lib/types/std-adapter/component-loader.d.ts",
+      "import": "./lib/types/std-adapter/component-loader.js"
     },
     "./invariant": {
       "types": "./lib/types/dsh-adapter/invariant.d.ts",
@@ -79,8 +135,9 @@
   },
   "scripts": {
     "clean": "node scripts/clean-lib.mjs",
-    "build:dsh-std": "pnpm --dir vendor/dsh-std install --frozen-lockfile --ignore-scripts && pnpm --dir vendor/dsh-std --filter @dsh-std/core --filter @dsh-std/manifest --filter @dsh-std/connection --filter @dsh-std/presentation --filter @dsh-std/command --filter @dsh-std/storage --filter @dsh-std/messages -r build",
-    "compile": "npm run build:dsh-std && npm run clean && tsc -p tsconfig.json",
+    "precompile": "pnpm run build:std",
+    "build:std": "git submodule update --init ecosystem-spec vendor/dsh-std && pnpm --filter \"@dsh-std/*\" --recursive build",
+    "compile": "npm run clean && tsc -p tsconfig.json",
     "prepare": "npm run compile",
     "build": "npm run compile && npm run verify:build",
     "dev": "node scripts/dev-test.mjs",
@@ -89,7 +146,20 @@
     "prompt:debug": "node scripts/read-prompt-debug.mjs",
     "tui": "node --import tsx/esm scripts/run.ts",
     "smoke": "node --import tsx/esm scripts/smoke.tsx",
-    "verify:build": "npm run verify:boundary && npm run verify:contract && npm run verify:manifest-deps && npm run verify:patch-surface && npm run verify:plugin-spec && npm run verify:plugin-grants && npm run verify:plugin-storage && npm run verify:plugin-messages && npm run verify:plugin-ledger && npm run verify:plugin-commands && npm run verify:plugin-negotiation && npm run verify:packaged-presets && npm run verify:minimal-preset-tools && npm run verify:liangshen-bootstrap",
+    "verify:build": "npm run verify:boundary && npm run verify:contract && npm run verify:manifest-deps && npm run verify:patch-surface && npm run verify:plugin-spec && npm run verify:plugin-grants && npm run verify:plugin-storage && npm run verify:plugin-messages && npm run verify:plugin-ledger && npm run verify:plugin-commands && npm run verify:plugin-negotiation && npm run verify:packaged-presets && npm run verify:minimal-preset-tools && npm run verify:liangshen-bootstrap && npm run verify:provider-wizard && npm run verify:standard-components && npm run verify:remote-channel",
+    "verify:provider-wizard": "node scripts/verify-provider-wizard.mjs",
+    "verify:standard-components": "node --preserve-symlinks --import tsx/esm scripts/verify-standard-components.ts",
+    "verify:channel-http": "node --preserve-symlinks --import tsx/esm scripts/verify-channel-http.ts",
+    "verify:channel-parity": "node --preserve-symlinks --import tsx/esm scripts/verify-channel-parity.ts",
+    "verify:direct-backend": "node --preserve-symlinks --import tsx/esm scripts/verify-direct-backend.ts",
+    "verify:channel-lifecycle": "node --preserve-symlinks --import tsx/esm scripts/verify-subagent-model-route.tsx",
+    "verify:remote-approval": "node --preserve-symlinks --import tsx/esm scripts/verify-remote-approval.ts",
+    "verify:external-redirect": "node --preserve-symlinks --import tsx/esm scripts/verify-external-redirect.ts",
+    "verify:remote-standard-plugin": "node --preserve-symlinks --import tsx/esm scripts/verify-remote-standard-plugin.ts",
+    "verify:remote-channel": "npm run verify:channel-http && npm run verify:channel-parity && npm run verify:direct-backend && npm run verify:channel-lifecycle && npm run verify:remote-approval && npm run verify:external-redirect && npm run verify:remote-standard-plugin",
+    "verify:server-boot": "node scripts/verify-server-boot.mjs",
+    "verify:packed-profile": "node scripts/verify-packed-profile.mjs",
+    "verify:live-server": "node --preserve-symlinks --import tsx/esm scripts/verify-live-server.ts",
     "verify:boundary": "node --import tsx/esm scripts/verify-adapter-boundary.ts",
     "verify:contract": "node --import tsx/esm scripts/verify-upstream-contract.ts",
     "verify:manifest-deps": "node --import tsx/esm scripts/verify-manifest-deps.ts",
@@ -101,7 +171,7 @@
     "verify:packaged-presets": "node scripts/verify-packaged-presets.mjs",
     "verify:minimal-preset-tools": "node scripts/verify-minimal-preset-tools.mjs",
     "verify:liangshen-bootstrap": "node scripts/verify-liangshen-bootstrap.mjs",
-    "verify:package": "npm pack --dry-run --json --ignore-scripts | node scripts/verify-package.mjs",
+    "verify:package": "pnpm --config.ignore-scripts=true pack --dry-run --json | node scripts/verify-package.mjs",
     "verify:prompt-debug": "npm run build && node scripts/verify-prompt-debug.mjs",
     "verify:clipboard-image": "node --import tsx/esm scripts/verify-clipboard-image.ts",
     "verify:plugin-ledger": "node --import tsx/esm scripts/verify-plugin-ledger.ts",
@@ -136,13 +206,22 @@
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "dependencies": {
+    "@dsh-std/adapter-dsh": "workspace:*",
     "@dsh-std/command": "workspace:*",
+    "@dsh-std/composition": "workspace:*",
     "@dsh-std/connection": "workspace:*",
     "@dsh-std/core": "workspace:*",
+    "@dsh-std/lifecycle": "workspace:*",
     "@dsh-std/manifest": "workspace:*",
     "@dsh-std/messages": "workspace:*",
+    "@dsh-std/model": "workspace:*",
     "@dsh-std/presentation": "workspace:*",
+    "@dsh-std/sdk": "workspace:*",
+    "@dsh-std/session": "workspace:*",
     "@dsh-std/storage": "workspace:*",
+    "@dsh-std/tool": "workspace:*",
+    "@dsh-std/ui": "workspace:*",
+    "@dsh-std/workspace": "workspace:*",
     "@alcalzone/ansi-tokenize": "^0.3.0",
     "auto-bind": "^4.0.0 || ^5.0.0",
     "bidi-js": "^1.0.0",
@@ -151,6 +230,7 @@
     "cli-highlight": "^2.1.11",
     "code-excerpt": "^3.0.0 || ^4.0.0",
     "diff": "^8.0.4",
+    "dsh-ecosystem-spec": "workspace:*",
     "dsh-working-activity": "^0.2.6",
     "emoji-regex": "^10.0.0",
     "figures": "^6.1.0",
@@ -168,16 +248,27 @@
     "supports-hyperlinks": "^3.0.0",
     "type-fest": "^4.0.0",
     "usehooks-ts": "^3.1.0",
-    "wrap-ansi": "^8.0.0 || ^9.0.0"
+    "wrap-ansi": "^8.0.0 || ^9.0.0",
+    "ws": "^8.21.0"
   },
   "bundledDependencies": [
+    "dsh-ecosystem-spec",
+    "@dsh-std/adapter-dsh",
     "@dsh-std/command",
+    "@dsh-std/composition",
     "@dsh-std/connection",
     "@dsh-std/core",
+    "@dsh-std/lifecycle",
     "@dsh-std/manifest",
     "@dsh-std/messages",
+    "@dsh-std/model",
     "@dsh-std/presentation",
-    "@dsh-std/storage"
+    "@dsh-std/sdk",
+    "@dsh-std/session",
+    "@dsh-std/storage",
+    "@dsh-std/tool",
+    "@dsh-std/ui",
+    "@dsh-std/workspace"
   ],
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
@@ -223,6 +314,7 @@
     "@deepseek-ai/dsh-user-questions": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-web-app": "0.1.0-rc.6",
     "@deepseek-ai/dsh-workspace": "^0.1.0-rc.6",
+    "@types/ws": "^8.18.1",
     "@deepseek-ai/schemastery": "^3.18.1",
     "@types/lodash-es": "^4.17.0",
     "@types/node": "^22.0.0",

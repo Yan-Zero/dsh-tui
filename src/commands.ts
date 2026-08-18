@@ -77,6 +77,7 @@ export const LOCAL_COMMANDS: LocalCommand[] = [
   { name: 'cost', description: 'Show session token usage' },
   { name: 'config', description: 'Show the dsh-tui configuration source' },
   { name: 'settings', description: 'View and edit plugin settings' },
+  { name: 'scene', description: 'Open a plugin scene by id' },
   { name: 'doctor', description: 'Run environment checks' },
   { name: 'init', description: 'Create AGENTS.md in the working directory' },
   { name: 'agents', description: 'Show subagents of this session' },

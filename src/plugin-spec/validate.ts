@@ -1,7 +1,7 @@
 /** Semantic validation layered on the official manifest parser/projection. */
 
 import { projectManifest } from '@dsh-std/manifest'
-import { createAdmissionCatalog } from './tui-extension.js'
+import { DECISION_EVENTS_COORDINATE, createAdmissionCatalog } from './tui-extension.js'
 import { registryEntries } from './registry.js'
 import { INTERCEPT_PERMISSIONS, normalizePermissionScope } from './permission-scope.js'
 import type {
@@ -83,7 +83,8 @@ export function validatePlugin(index: ContractIndex, manifest: PluginManifest): 
   const knownPermissions = new Set(index.permissions.permissions.map(permission => permission.name))
   const commandIds = new Set(manifest.contributes.commands.map(command => command.id))
   const requiresDecisionEvents = manifest.requires.contracts.some(requirement =>
-    requirement.apiVersion === 'tui.dsh/v1alpha1' && requirement.kind === 'DecisionEvents')
+    requirement.apiVersion === DECISION_EVENTS_COORDINATE.apiVersion
+      && requirement.kind === DECISION_EVENTS_COORDINATE.kind)
   for (const permission of manifest.permissions) {
     if (!knownPermissions.has(permission.name)) {
       throw new Error(`permission is not admitted by the TUI profile: ${permission.name}`)
@@ -95,7 +96,7 @@ export function validatePlugin(index: ContractIndex, manifest: PluginManifest): 
       throw new Error(`commands.invoke scope is not a declared command: ${permission.scope}`)
     }
     if (INTERCEPT_PERMISSIONS.has(permission.name) && !requiresDecisionEvents) {
-      throw new Error(`${permission.name} requires tui.dsh/v1alpha1#DecisionEvents`)
+      throw new Error(`${permission.name} requires ${DECISION_EVENTS_COORDINATE.apiVersion}#${DECISION_EVENTS_COORDINATE.kind}`)
     }
   }
   for (const commandId of commandIds) {

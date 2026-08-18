@@ -15,7 +15,7 @@
  *
  * @module @deepseek-harness-tui/dsh-tui/sessions/view
  */
-import type { SessionSummary } from '../dsh-adapter/sessions/index.js'
+import type { SessionSummary } from '../tui-contract/sessions.js'
 
 /** What the browser is currently showing. */
 export interface BrowserFilters {

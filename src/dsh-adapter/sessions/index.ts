@@ -25,4 +25,4 @@ export type {
   SessionSummary,
   SessionTitle,
   TitleSource,
-} from './types.js'
+} from '../../tui-contract/sessions.js'

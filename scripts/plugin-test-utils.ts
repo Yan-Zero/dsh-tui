@@ -1,6 +1,7 @@
 /** Small helpers shared by the plugin runtime verification batteries. */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { DECISION_EVENTS } from 'dsh-ecosystem-spec/protocols'
 
 export const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -63,4 +64,4 @@ export async function mountAdmitted(
 export const STORAGE_COORDINATE = { apiVersion: 'storage.dsh/v1alpha1', kind: 'LocalStorage' } as const
 export const COMMAND_COORDINATE = { apiVersion: 'commands.dsh/v1alpha1', kind: 'Command' } as const
 export const MESSAGE_COORDINATE = { apiVersion: 'messages.dsh/v1alpha1', kind: 'MessageObserver' } as const
-export const DECISION_COORDINATE = { apiVersion: 'tui.dsh/v1alpha1', kind: 'DecisionEvents' } as const
+export const DECISION_COORDINATE = DECISION_EVENTS

@@ -6,9 +6,9 @@ import { isMod, isPlainReturn } from '../utils/modifiers.js'
 import { truncateWidth } from '../sessions/format.js'
 import { getLang, t } from '../i18n.js'
 import { SettingsForm } from '../dsh-adapter/settingsEditor.js'
-import type { TuiSettingsField, TuiSettingsSection } from '../dsh-adapter/settings-sections.js'
+import type { TuiSettingsField, TuiSettingsSection } from '../tui-runtime/settings-sections.js'
 import type { LocalizedDescriptions } from '../commands.js'
-import type { Channel } from '../dsh-adapter/channel.js'
+import type { Channel } from '../tui-contract/channel.js'
 
 /** What the screen is doing with the focused field. */
 type SettingsMode = 'list' | 'edit'

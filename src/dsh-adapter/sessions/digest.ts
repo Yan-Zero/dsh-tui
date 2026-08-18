@@ -21,7 +21,7 @@
  */
 import { basename } from 'node:path'
 import { decodeFrames, decodeTail, readWindow, walkFrames, type LogLine } from './frames.js'
-import type { PreviewEntry, SessionDigest, SessionTitle } from './types.js'
+import type { PreviewEntry, SessionDigest, SessionTitle } from '../../tui-contract/sessions.js'
 
 /** Head window budget. Eight times the measured worst-case prompt offset. */
 export const HEAD_WINDOW_BYTES = 64 * 1024

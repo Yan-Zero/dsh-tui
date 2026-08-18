@@ -10,7 +10,7 @@
  *
  * @module @deepseek-harness-tui/dsh-tui/sessions/header
  */
-import type { SessionKind } from './types.js'
+import type { SessionKind } from '../../tui-contract/sessions.js'
 
 /** The header fields this feature reads, all optional at runtime. */
 export interface RawSessionHeader {

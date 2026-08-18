@@ -45,3 +45,32 @@ export function ProgressBar({
 }
 
 const BLOCKS = [' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█']
+
+/** Animated progress bar for work whose duration cannot be measured. */
+export function IndeterminateProgressBar({
+  width,
+  fillColor,
+  emptyColor,
+}: {
+  width: number
+  fillColor?: keyof Theme
+  emptyColor?: keyof Theme
+}): React.ReactNode {
+  const [frame, setFrame] = React.useState(0)
+  React.useEffect(() => {
+    const timer = setInterval(() => { setFrame(value => value + 1) }, 120)
+    return () => { clearInterval(timer) }
+  }, [])
+  const segment = Math.min(5, Math.max(1, width))
+  const travel = Math.max(1, width - segment)
+  const cycle = travel * 2
+  const phase = frame % cycle
+  const start = phase <= travel ? phase : cycle - phase
+  return (
+    <Text>
+      <Text color={emptyColor}>{'░'.repeat(start)}</Text>
+      <Text color={fillColor}>{'█'.repeat(segment)}</Text>
+      <Text color={emptyColor}>{'░'.repeat(Math.max(0, width - start - segment))}</Text>
+    </Text>
+  )
+}

@@ -1,7 +1,7 @@
 import React from 'react'
 import { t } from '../i18n.js'
 import { Box, Text, useTerminalSize } from '../ui.js'
-import type { LlmModelInfo } from '../dsh-adapter/types.js'
+import type { ChannelModelInfo } from '../tui-contract/channel.js'
 import { Pane } from './design-system/Pane.js'
 import { ListItem } from './design-system/ListItem.js'
 import { HintLine } from './design-system/HintLine.js'
@@ -21,7 +21,7 @@ export function ModelPicker({
   focusIndex,
   currentModel,
 }: {
-  models: readonly LlmModelInfo[]
+  models: readonly ChannelModelInfo[]
   focusIndex: number
   currentModel: string
 }): React.ReactNode {

@@ -13,6 +13,8 @@ import { createChildStderrReporter, installChildStderrGuard } from './childStder
 import { logForDebugging } from '../utils/debug.js'
 import { QuestionStore } from './questions.js'
 import { ApprovalStore } from './approvals.js'
+import type { TuiBackendBinding } from '../tui-runtime/backends.js'
+import type { TuiPresentationRuntime } from '../std-adapter/presentation-participant.js'
 import { registerPackagedSkills } from './packaged-skills.js'
 import { registerPromptDebug } from './promptDebug.js'
 import { readActivityFrames } from '../activityPrefs.js'
@@ -26,14 +28,14 @@ import { ensureLegacySessionEventTypes } from './compat/index.js'
 import { clearResumeTarget, writeResumeTarget } from '../sessionHistory.js'
 import { resolveSessionCwd } from '../utils/workspaceRoot.js'
 import { checkForTuiUpdate, installedTuiVersion, isVersionNewer, resolveDshProfileName, resolveTuiUpdateTarget, updateTuiAndRestart } from '../update.js'
-import { isLang, resolveStartupLang, setLang, t } from '../i18n.js'
+import { getLang, isLang, resolveStartupLang, setLang, t } from '../i18n.js'
 import { detectLegacyEnv, migrateLegacyDataDir, RENAMED_ENV } from '../utils/paths.js'
 import { Chat } from '../screens/Chat.js'
 import type { TuiDialogRuntime } from './dialogs.js'
 import type { TuiStatusRuntime } from './status.js'
 import type { TuiShortcutRuntime } from './shortcuts.js'
 import { attachSessionToWorkspace } from './workspace.js'
-import { createLocalWorkspaceRuntime } from './workspaces.js'
+import { createLocalWorkspaceRuntime } from '../tui-runtime/workspaces.js'
 import { render, ThemeProvider, AlternateScreen } from '../ui.js'
 import instances from '../ink/instances.js'
 import { cursorMove, DISABLE_KITTY_KEYBOARD, DISABLE_MODIFY_OTHER_KEYS, DISABLE_WIN32_INPUT_MODE } from '../ink/termio/csi.js'
@@ -148,7 +150,9 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     const presetId = context.agent === undefined ? undefined : runningPresetOf(context.agent.session)
     return filterMinimalPresetTools(assembled, presetId)
   })
-  const questionStore = new QuestionStore()
+  const standardPresentation = ctx.get('tuiPresentation') as TuiPresentationRuntime | undefined
+  const questionStore = standardPresentation?.questions ?? new QuestionStore()
+  const approvalStore = standardPresentation?.approvals ?? new ApprovalStore()
   // Packaged skills (/audit, /bug, …): contribute them through the host's
   // skill registry so they resolve with zero manual copying.
   registerPackagedSkills(ctx)
@@ -309,7 +313,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // validated startup resolution, on resume the route the target session's
   // own records carry (a complete cordis.yml pin wins over them).
   const displayRoute = createdRoute ?? startupRoute
-  const channel = createChannel(ctx, agent, {
+  const localChannel = createChannel(ctx, agent, {
     model: displayRoute.model,
     // A RESUMED session keeps its persisted header cwd (issue #96 review):
     // pre-upgrade sessions recorded the launch directory, and re-resolving
@@ -342,6 +346,14 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     diffLayout: config.diffLayout,
     handle,
   })
+  const backendBinding: TuiBackendBinding | undefined = await ctx.get('tuiBackends')?.bind({
+    channel: localChannel,
+    askQuestions: request => questionStore.ask(request),
+    requestApproval: request => approvalStore.parkExternal(request),
+    locale: getLang,
+  })
+  const channel = backendBinding?.channel ?? localChannel
+  if (backendBinding !== undefined) ctx.effect(() => () => backendBinding.dispose())
   // Register the dsh-tui settings namespace so the /settings screen can
   // edit it (the section below was '命名空间未注册' without this): the
   // user layer in settings.yaml wins over cordis.yml's diffLayout, and
@@ -402,7 +414,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // being mounted — a bare composition without the dsh-base approval row
   // has nothing to answer into. channel.agentId tracks agent swaps
   // (/new, /resume, rewind), so ownership is re-evaluated per request.
-  const approvalStore = new ApprovalStore()
+  if (standardPresentation !== undefined) {
+    ctx.effect(() => standardPresentation.bindNotifications(notice => {
+      channel.notify(notice.text, notice.options)
+    }), 'dsh-tui standard Presentation notifications')
+  }
   if (ctx.get('approval') !== undefined) {
     ctx.on('approval/request', (req, next) =>
       String(req.agent.id) === channel.agentId ? approvalStore.park(req) : next())
@@ -413,8 +429,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // which mounts them as ctx.cmdlineArgs. Submit once the channel exists —
   // delivery goes through the normal pending/inbox chain, so no special
   // timing is needed; flag-shaped leftovers are not prompt text.
-  const cmdlineArgs = (ctx as { cmdlineArgs?: { args?: readonly string[] } }).cmdlineArgs?.args
-  const initialPrompt = cmdlineArgs?.filter(arg => !arg.startsWith('-')).join(' ').trim()
+  const launchPrompt = (ctx.get('tuiLaunch') as import('./launch.js').TuiLaunchRuntime | undefined)?.prompt
+  const initialPrompt = launchPrompt?.join(' ').trim()
   if (initialPrompt) channel.submit(initialPrompt)
   // Attach the stderr reporter to the live channel and flush anything a
   // startup-spawned server produced while the channel didn't exist yet.
@@ -519,6 +535,9 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     extensionDialogs: (ctx.get('tuiDialogs') as TuiDialogRuntime | undefined)?.store,
     extensionStatus: (ctx.get('tuiStatus') as TuiStatusRuntime | undefined)?.store,
     extensionShortcuts: ctx.get('tuiShortcuts') as TuiShortcutRuntime | undefined,
+    onBackendCommand: backendBinding === undefined
+      ? undefined
+      : request => backendBinding.handleCommand(request),
     // Full-screen surfaces inside Chat — the trajectory scene and the session
     // browser — enter the alt screen themselves in inline mode; in fullscreen
     // the tree is already wrapped below, so they must not nest.

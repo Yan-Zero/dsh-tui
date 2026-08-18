@@ -9,10 +9,15 @@ const input = await new Promise((resolve, reject) => {
 })
 
 const reports = JSON.parse(input)
-// npm 10 emits an array while npm 11 emits an object keyed by package name.
-const report = Array.isArray(reports) ? reports[0] : Object.values(reports)[0]
+// npm 10 emits an array, npm 11 may emit an object keyed by package name,
+// and pnpm emits the report object directly.
+const report = Array.isArray(reports)
+  ? reports[0]
+  : Array.isArray(reports?.files)
+    ? reports
+    : Object.values(reports)[0]
 if (report === undefined || !Array.isArray(report.files)) {
-  throw new Error('npm pack did not return a package file list')
+  throw new Error('package manager did not return a package file list')
 }
 
 const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
@@ -54,6 +59,20 @@ if ([...packed].some(path => path.startsWith('src/'))) {
 }
 if (packed.has('lib/invariant.js')) {
   throw new Error('npm package contains the obsolete hand-built invariant entry')
+}
+
+for (const standardFile of [
+  'node_modules/dsh-ecosystem-spec/package.json',
+  'node_modules/dsh-ecosystem-spec/protocols/profile-definitions.js',
+  'node_modules/dsh-ecosystem-spec/registry/contracts/decision-events-v1alpha1.json',
+  'node_modules/@dsh-std/adapter-dsh/lib/index.js',
+  'node_modules/@dsh-std/connection/lib/index.js',
+  'node_modules/@dsh-std/core/lib/index.js',
+  'node_modules/@dsh-std/sdk/lib/index.js',
+  'node_modules/@dsh-std/ui/lib/index.js',
+  'node_modules/@dsh-std/workspace/lib/index.js',
+]) {
+  if (!packed.has(standardFile)) throw new Error(`bundled standard file missing from tarball: ${standardFile}`)
 }
 
 await import(new URL(`../${manifest.main}`, import.meta.url))

@@ -30,7 +30,7 @@
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DATA_DIR } from '../../utils/paths.js'
-import type { TitleSource } from './types.js'
+import type { TitleSource } from '../../tui-contract/sessions.js'
 
 /**
  * Bumped when an entry's shape changes. A mismatch drops the whole file

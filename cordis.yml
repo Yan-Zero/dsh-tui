@@ -23,6 +23,21 @@
   config:
     policy: !!js "process.platform === 'win32' ? 'never' : ((process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'never' : 'ask')"
 
+- id: dsh-tui-standards
+  name: '@deepseek-harness-tui/dsh-tui/standards'
+  config:
+    profileBaseUrl: !!js ctx.baseUrl
+
+- id: dsh-tui-launch
+  name: '@deepseek-harness-tui/dsh-tui/launch'
+
+- id: dsh-tui-channel-server
+  name: '@deepseek-harness-tui/dsh-tui/channel-server'
+  inject: [tuiProfileConfig]
+
+- id: dsh-tui-presentation-participant
+  name: '@deepseek-harness-tui/dsh-tui/presentation-participant'
+
 - id: dsh-tui-workspaces
   name: '@deepseek-harness-tui/dsh-tui/workspaces'
 
@@ -37,6 +52,10 @@
 - id: dsh-tui-scenes
   name: '@deepseek-harness-tui/dsh-tui/scenes'
 
+- id: dsh-tui-standard-ui-host
+  name: '@deepseek-harness-tui/dsh-tui/ui-host'
+  inject: [dshStd, tuiSettingsSections, tuiScenes]
+
 # Plugin-interop anchor (v0.15): unified grant store, runtime generation
 # id, Host Descriptor; later contract surfaces mount off this row's apply.
 - id: dsh-tui-plugin-host
@@ -48,9 +67,21 @@
 - id: dsh-tui-extensions
   name: '@deepseek-harness-tui/dsh-tui/extensions'
 
+- id: dsh-tui-backends
+  name: '@deepseek-harness-tui/dsh-tui/backends'
+
+- id: dsh-tui-direct-backend
+  name: '@deepseek-harness-tui/dsh-tui/direct-backend'
+
+- id: dsh-standard-profile-components
+  name: '@deepseek-harness-tui/dsh-tui/component-loader'
+  inject: [dshStd, tuiStandardParticipant, tuiStandardUiHost, tuiWorkspaces, tuiCommandTrees, tuiSettingsSections, tuiScenes]
+  config:
+    profileBaseUrl: !!js ctx.baseUrl
+
 - id: dsh-tui
   name: '@deepseek-harness-tui/dsh-tui'
-  inject: [agents, tuiWorkspaces, tuiScenes, tuiDialogs, tuiStatus, tuiShortcuts, tuiRenderers]
+  inject: [agents, tuiWorkspaces, tuiScenes, tuiDialogs, tuiStatus, tuiShortcuts, tuiRenderers, tuiPresentation, tuiBackends]
   config:
     provider: deepseek-official
     # Alt-screen fullscreen (CC 同款): 应用内鼠标选区（选择即复制, OSC 52 +

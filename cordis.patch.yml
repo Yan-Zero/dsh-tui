@@ -178,6 +178,27 @@
     - id: workspace
       name: '@deepseek-ai/dsh-workspace'
 
+    - id: dsh-tui-launch
+      name: '@deepseek-harness-tui/dsh-tui/launch'
+
+    - id: dsh-tui-standards
+      name: '@deepseek-harness-tui/dsh-tui/standards'
+      config:
+        profileBaseUrl: !!js ctx.root.baseUrl
+
+    # Publish the terminal participant before standard components are
+    # composed, so required Presentation contracts bind deterministically.
+    - id: dsh-tui-presentation-participant
+      name: '@deepseek-harness-tui/dsh-tui/presentation-participant'
+      inject: [dshStd, tuiLaunch]
+
+    # `--server` mounts the Channel provider and its small HTTP/WebSocket
+    # carrier after its generic Presentation relay is available. In an
+    # ordinary terminal launch this entry is inert.
+    - id: dsh-tui-channel-server
+      name: '@deepseek-harness-tui/dsh-tui/channel-server'
+      inject: [agents, dshStd, tuiLaunch, tuiPresentation, tuiProfileConfig]
+
     # Generic terminal workspace registry. Optional plugins add providers;
     # the TUI itself always supplies LOCAL and has no provider-specific code.
     - id: dsh-tui-workspaces
@@ -198,6 +219,12 @@
     - id: dsh-tui-scenes
       name: '@deepseek-harness-tui/dsh-tui/scenes'
 
+    # Publish the TUI's SettingsSection and Scene surfaces through the
+    # standard ContributionHost before any standard UI facet is activated.
+    - id: dsh-tui-standard-ui-host
+      name: '@deepseek-harness-tui/dsh-tui/ui-host'
+      inject: [dshStd, tuiSettingsSections, tuiScenes]
+
     # Plugin-interop anchor (Community Consensus v0.15): the unified grant
     # store, runtime generation id, and Host Descriptor live here; later
     # contract surfaces (plugin storage, message observation, effect
@@ -215,6 +242,25 @@
     # and need no row.
     - id: dsh-tui-extensions
       name: '@deepseek-harness-tui/dsh-tui/extensions'
+
+    # Optional execution backends compose around the local Channel. With no
+    # provider this remains an identity layer.
+    - id: dsh-tui-backends
+      name: '@deepseek-harness-tui/dsh-tui/backends'
+
+    - id: dsh-tui-direct-backend
+      name: '@deepseek-harness-tui/dsh-tui/direct-backend'
+      inject: [tuiBackends, dshStd, tuiLaunch]
+
+    # Load standard components after the TUI has published Presentation and
+    # mounted its private contribution runtimes. Public dsh-std extensions
+    # are installed by adapter-dsh; TUI-owned extensions are bound here from
+    # the same lifecycle publications.
+    - id: dsh-standard-profile-components
+      name: '@deepseek-harness-tui/dsh-tui/component-loader'
+      inject: [dshStd, tuiStandardParticipant, tuiStandardUiHost, tuiWorkspaces, tuiCommandTrees, tuiSettingsSections, tuiScenes]
+      config:
+        profileBaseUrl: !!js ctx.baseUrl
 
     # The agent-preset roster (issue #8): `ctx.agentPresets`, the service the
     # TUI composes every session's model-facing world from. No `roots` here —
@@ -245,7 +291,7 @@
       name: '@deepseek-harness-tui/dsh-tui'
       # The entry-level dependency augments the plugin's `agents` inject and
       # prevents startup Session creation from racing WorkspaceRegistry init.
-      inject: [workspaceRegistry, agents, tuiWorkspaces, tuiScenes, tuiDialogs, tuiStatus, tuiShortcuts, tuiRenderers]
+      inject: [workspaceRegistry, agents, tuiWorkspaces, tuiScenes, tuiDialogs, tuiStatus, tuiShortcuts, tuiRenderers, tuiPresentation, tuiBackends, tuiLaunch]
       # `tuiWorkspaces`/`tuiScenes` (and the dsh-tui-extensions services)
       # live in the entry-level inject ONLY as an
       # ordering (and reload-rebind) guarantee alongside their service rows
@@ -254,8 +300,8 @@
       # copy of the package than the plugin module it loads, and a hard
       # code-level inject then deadlocks the tree at boot ("pending (waiting
       # for service: tuiWorkspaces)"). Without the rows the TUI degrades:
-      # /workspace falls back to the local-only runtime, plugin scenes never
-      # open. (The comment sits below the inject line:
+      # Without the rows the TUI degrades to its local identity runtime and
+      # plugin scenes do not open. (The comment sits below the inject line:
       # verify-workspace-attachment.mjs asserts the name→inject distance.)
       config:
         provider: deepseek-official

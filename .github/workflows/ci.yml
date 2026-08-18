@@ -20,7 +20,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          # dsh-tui owns top-level ecosystem-spec and dsh-std checkouts.  The
+          # ecosystem-spec repository's nested fallback is only for standalone
+          # consumers and must not introduce a second dsh-std into this build.
+          submodules: true
 
       - name: Verify generated output is not checked in
         run: test -z "$(git ls-files -- lib)"
@@ -42,7 +45,7 @@ jobs:
 
       - name: Verify clean compile output
         run: |
-          test -f lib/types/index.js
+          test -f lib/types/dsh-adapter/index.js
           test -f lib/types/dsh-adapter/invariant.js
 
       - run: pnpm verify:build

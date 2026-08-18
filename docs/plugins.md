@@ -84,13 +84,10 @@ v0.15。要点：
   compatible`——引用落在注册表之外时回答 `unknown` 而不是 `rejected`
   （无法判定不等于判定不兼容）。
 
-仓库内的落地物：
+规范与实现的边界：
 
-- `vendor/dsh-std/` — 固定 revision 的官方协议包（manifest parser、
-  projection、ProtocolCatalog 与各契约 validator）。
-- `ecosystem-spec/` — 固定 admission profile 的只读 registry / schema /
-  conformance fixtures；`npm run verify:plugin-spec` 检查 profile hash 与
-  fixtures 漂移。
+- `dsh-ecosystem-spec` — TUI admission profile、私有协议、registry、schema
+  与 conformance fixtures；它固定并传递所需的 `dsh-std` revision。
 - `src/plugin-spec/` — 校验/协商纯库：官方 parser 负责 manifest 形状，
   `validatePlugin`/`validateHost` 负责 profile 语义，五态 `negotiate` 使用
   同一 `ProtocolCatalog`。

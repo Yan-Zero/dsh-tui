@@ -1,10 +1,12 @@
 import React from 'react'
 import { Box, Text } from '../ui.js'
 import { t } from '../i18n.js'
-import type { TuiWorkspaceChoice } from '../workspaces.js'
+import type { WorkspaceChoice } from '../tui-contract/workspaces.js'
 import { Pane } from './design-system/Pane.js'
 import { ListItem } from './design-system/ListItem.js'
 import { HintLine } from './design-system/HintLine.js'
+import { IndeterminateProgressBar, ProgressBar } from './design-system/ProgressBar.js'
+import type { WorkspaceProgress } from '../tui-contract/workspaces.js'
 
 const WINDOW = 8
 
@@ -14,12 +16,14 @@ export function WorkspaceFlowPicker({
   choices,
   focusIndex,
   busy = false,
+  progress = null,
   input = null,
 }: {
   title: string
-  choices: readonly TuiWorkspaceChoice[]
+  choices: readonly WorkspaceChoice[]
   focusIndex: number
   busy?: boolean
+  progress?: WorkspaceProgress | null
   input?: { value: string; cursor: number; placeholder?: string } | null
 }): React.ReactNode {
   const start = Math.max(0, Math.min(focusIndex - Math.floor(WINDOW / 2), choices.length - WINDOW))
@@ -59,11 +63,19 @@ export function WorkspaceFlowPicker({
             )}
           </Box>
         )}
+        {busy && progress !== null && (
+          <Box marginTop={1}>
+            {progress.ratio === undefined
+              ? <IndeterminateProgressBar width={24} fillColor="remember" emptyColor="inactive" />
+              : <ProgressBar ratio={progress.ratio} width={24} fillColor="remember" emptyColor="inactive" />}
+            <Text>  {progress.label}</Text>
+          </Box>
+        )}
       </Box>
       <Text dimColor italic>
         <HintLine text={
           busy
-            ? t('workspace-flow-loading')
+            ? t('workspace-flow-cancel')
             : input !== null
               ? t('workspace-flow-input-hint')
               : choices[focusIndex]?.input !== undefined

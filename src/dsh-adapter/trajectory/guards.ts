@@ -27,8 +27,6 @@
  * here, so a future harness that starts emitting it is picked up for free.
  */
 
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
-
 /**
  * A session event reduced to the envelope the projection relies on. Only
  * `type`, `seq` and `time` are contractual across every event; `data` is
@@ -54,8 +52,8 @@ export interface RawTrajEvent {
  * @param events - The session's immutable event snapshot.
  * @returns The same array, typed for guard-mediated access.
  */
-export function asRawEvents(events: readonly SessionEvent[]): readonly RawTrajEvent[] {
-  return events as readonly RawTrajEvent[]
+export function asRawEvents(events: readonly RawTrajEvent[]): readonly RawTrajEvent[] {
+  return events
 }
 
 /** True for a non-null object — the precondition of every guard below. */

@@ -2,7 +2,7 @@ import React from 'react'
 import { Box, Text } from '../../ui.js'
 import { t } from '../../i18n.js'
 import { formatProject, formatWhen, kindLabel, truncateWidth, wrapWidth } from '../../sessions/format.js'
-import type { PreviewEntry, SessionSummary } from '../../dsh-adapter/sessions/index.js'
+import type { PreviewEntry, SessionSummary } from '../../tui-contract/sessions.js'
 
 /** Role marker and colour for a preview entry. */
 const ROLE = {

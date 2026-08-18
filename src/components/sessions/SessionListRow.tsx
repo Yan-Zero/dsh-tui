@@ -8,7 +8,7 @@ import {
   titleColor,
   truncateWidth,
 } from '../../sessions/format.js'
-import type { SessionSummary } from '../../dsh-adapter/sessions/index.js'
+import type { SessionSummary } from '../../tui-contract/sessions.js'
 
 /**
  * One session in the browser's list: a title line and a metadata line.

@@ -1,7 +1,7 @@
 import React from 'react'
 import { Box, Text } from '../ui.js'
 import { t } from '../i18n.js'
-import type { TuiWorkspaceTarget } from '../workspaces.js'
+import type { WorkspaceTarget } from '../tui-contract/workspaces.js'
 import { Pane } from './design-system/Pane.js'
 import { ListItem } from './design-system/ListItem.js'
 import { HintLine } from './design-system/HintLine.js'
@@ -14,7 +14,7 @@ export function WorkspacePicker({
   focusIndex,
   currentCwd,
 }: {
-  targets: readonly TuiWorkspaceTarget[]
+  targets: readonly WorkspaceTarget[]
   focusIndex: number
   currentCwd: string
 }): React.ReactNode {

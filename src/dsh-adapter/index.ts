@@ -84,6 +84,15 @@ export interface Config {
   modes?: SessionModeSpec[]
 }
 
+/** Profile configuration owned by the runtime hosting the Agent. */
+export type TuiProfileConfig = Readonly<Config>
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    tuiProfileConfig: TuiProfileConfig
+  }
+}
+
 export const Config: Schema<Config> = Schema.object({
   sessionId: Schema.string().required(false),
   // No schema defaults on the route: a `.default()` here would make an
@@ -121,6 +130,10 @@ export const Config: Schema<Config> = Schema.object({
  * @returns a promise settling when the TUI teardown completes.
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
+  ctx.provide('tuiProfileConfig', Object.freeze({ ...config }))
+  const launch = ctx.get('tuiLaunch') as import('./launch.js').TuiLaunchRuntime | undefined
+  if (launch?.server === true) return
+  if (launch?.resume !== undefined) config = { ...config, sessionId: launch.resume }
   const { upstreamDrift, UPSTREAM_VALIDATED_VERSION } = await import('./contract.js')
   for (const entry of upstreamDrift()) {
     console.warn(

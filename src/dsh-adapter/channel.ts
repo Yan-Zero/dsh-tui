@@ -21,6 +21,7 @@ import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { renderContextSections, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import { loadBaselineInstructions } from '@deepseek-ai/dsh-agent-instructions'
 import type { Context } from '@deepseek-ai/cordis'
+import type { Channel as PublicChannel } from '../tui-contract/channel.js'
 import { extname, isAbsolute, join } from 'node:path'
 import { completeCommands, isLocalCommandName, LOCAL_COMMANDS, parseCommandName, type CommandCompletion, type CommandCompletionNode, type LocalCommand } from '../commands.js'
 import { clearResumeTarget, forgetSession, readResumeTarget, touchSession, writeResumeTarget } from '../sessionHistory.js'
@@ -38,7 +39,7 @@ import { writeActivityFrames } from '../activityPrefs.js'
 import { readEffortPref, writeEffortPref } from '../effortPrefs.js'
 import { readModelPref, writeModelPref } from '../modelPrefs.js'
 import { explicitModelRoute, recordedModelRoute, resolveModelRoute, validateModelRoute } from '../modelRoute.js'
-import type { ProviderSetupHost } from './providerWizard.js'
+import type { ProviderSetupHost } from '../tui-contract/provider-setup.js'
 import { readPresetPref, writePresetPref } from '../presetPrefs.js'
 import { composePreset, resolvePersistedPreset, rosterOf, runningPresetOf, serviceForAgent, type AgentPresetInfo } from './presets.js'
 import { isPresetName } from '../components/activityFrames.js'
@@ -46,16 +47,16 @@ import { existsSync, statSync, writeFileSync } from 'node:fs'
 import { logForDebugging } from '../utils/debug.js'
 import { homeDir, LEGACY_DATA_DIR } from '../utils/paths.js'
 import { extractMentions } from '../utils/mentions.js'
-import { t } from '../i18n.js'
+import { t as activeTranslation, translate, type Lang } from '../i18n.js'
 import { modeDisplayName, resolveSessionModes, type SessionModeSpec } from '../sessionModes.js'
 import type { SpinnerMode } from '../components/Spinner/spinnerMode.js'
 import { ActivityTracker, type ActivityState } from 'dsh-working-activity/status'
 import { attachSessionToWorkspace } from './workspace.js'
-import { createLocalWorkspaceRuntime, type TuiWorkspaceCommand, type TuiWorkspaceCommandResult, type TuiWorkspaceTarget } from './workspaces.js'
-import type { TuiCommandTreeRuntime } from './command-trees.js'
-import type { TuiSettingsSection, TuiSettingsSectionsRuntime } from './settings-sections.js'
-import type { SettingsHost } from './settingsEditor.js'
-import type { TuiSceneDescriptor, TuiSceneRuntime } from './scenes.js'
+import { createLocalWorkspaceRuntime, type WorkspaceCommand, type WorkspaceCommandResult, type WorkspaceTarget } from '../tui-runtime/workspaces.js'
+import type { TuiCommandTreeRuntime } from '../tui-runtime/command-trees.js'
+import type { TuiSettingsSection, TuiSettingsSectionsRuntime } from '../tui-runtime/settings-sections.js'
+import type { SettingsHost } from '../tui-contract/settings.js'
+import type { TuiSceneDescriptor, TuiSceneRuntime, TuiSceneSelection } from '../tui-runtime/scenes.js'
 import type { TuiRendererRuntime } from './renderers.js'
 import { dispatchTuiDecision, dispatchTuiNotification, normalizeCancelDecision } from './extension-events.js'
 import { installDecisionGuard } from './decision-guard.js'
@@ -419,6 +420,10 @@ export interface Channel {
   readonly cwd: string
   /** Human-facing cwd (remote POSIX path/URI instead of a host alias). */
   readonly displayCwd: string
+  /** Home directory of the runtime that owns this Channel. */
+  readonly homeDir: string
+  /** Filesystem path comparison semantics of the Channel authority. */
+  readonly pathCaseInsensitive: boolean
   /** Current git branch, when the cwd is inside a git worktree. */
   readonly gitBranch: string | undefined
   /** True between turn/start and turn/end — drives the working spinner. */
@@ -454,6 +459,8 @@ export interface Channel {
   readonly activityFrames: string | undefined
   /** Edit/Write diff presentation preference (`auto`/`split`/`unified`). */
   readonly diffLayout: 'auto' | 'split' | 'unified'
+  /** Apply a diff-layout change to the active local or remote channel. */
+  setDiffLayout(layout: 'auto' | 'split' | 'unified'): void
   /** Whether the in-process working-activity line is shown (config.activity). */
   readonly activityEnabled: boolean
   /** Whether the segmented context bar row shows in the status footer
@@ -568,16 +575,16 @@ export interface Channel {
    *  transcript cleared, the resume marker forgotten. */
   newSession(): Promise<boolean>
   /** Workspace targets contributed by the TUI and optional providers. */
-  listWorkspaces(): Promise<readonly TuiWorkspaceTarget[]>
+  listWorkspaces(): Promise<readonly WorkspaceTarget[]>
   /** Resolve an absolute path, file URL, or provider URI. */
-  resolveWorkspace(reference: string): Promise<TuiWorkspaceTarget | undefined>
+  resolveWorkspace(reference: string): Promise<WorkspaceTarget | undefined>
   /** Start a fresh session in the selected workspace. */
-  switchWorkspace(target: TuiWorkspaceTarget): Promise<boolean>
+  switchWorkspace(target: WorkspaceTarget): Promise<boolean>
   /** Rename the current durable workspace. */
   renameWorkspace(title: string): Promise<boolean>
   /** Provider-owned workspace subcommands. */
-  workspaceCommands(): readonly Pick<TuiWorkspaceCommand, 'name' | 'aliases' | 'description'>[]
-  runWorkspaceCommand(name: string, input: string): Promise<TuiWorkspaceCommandResult | undefined>
+  workspaceCommands(): readonly Pick<WorkspaceCommand, 'name' | 'aliases' | 'description'>[]
+  runWorkspaceCommand(name: string, input: string): Promise<WorkspaceCommandResult | undefined>
   /** Switch the live model (`/model` picker): forks the conversation at its
    *  current end and continues it with a new agent routed to `provider`/`model`.
    *  The history replays unchanged; only the request route changes. */
@@ -609,13 +616,15 @@ export interface Channel {
   switchPreset(presetId: string): Promise<boolean>
   /** Reset the visible transcript (`/clear`). */
   clear(): void
+  /** Whether the backing client can fetch history older than the current window. */
+  readonly hasOlder?: boolean
   /**
    * Re-render rows older than the current in-memory window from the session
    * log (rows beyond {@link ChannelState.rows}' cap are folded away; this
    * restores them for review). Returns the number of rows restored, 0 when
    * the whole log is already materialized.
    */
-  loadOlder(): number
+  loadOlder(): number | Promise<number>
   /** Push a transient notification above the prompt input. Returns an
    *  early-dismiss handle (the auto-timeout still runs as the backstop). */
   notify(text: string, options?: { color?: NotificationItem['color']; timeoutMs?: number }): () => void
@@ -678,10 +687,12 @@ export interface Channel {
   mcpStatus(): string[]
   /** Write the conversation transcript to `dsh-tui-export-<ts>.md` in the
    *  session cwd; returns the written path, or null on failure. */
-  exportSession(): string | null
+  exportSession(): string | null | Promise<string | null>
   /** Create `AGENTS.md` in the session cwd (DSH workspace-context file);
    *  returns the path, `'exists'` when already present, or null on failure. */
-  initWorkspace(): string | null
+  initWorkspace(): string | null | Promise<string | null>
+  /** Profile configuration paths and launch hints for `/config`. */
+  configInfo(): string[]
   /** Environment diagnostics for `/doctor`. */
   doctorInfo(): string[]
   /** Plugin contract/grant/ledger diagnostics for `/plugins` (C-070 trust
@@ -694,12 +705,9 @@ export interface Channel {
    * Dispose the host-registry entries this channel registered (skill slash
    * commands).
    *
-   * `commandService.register` binds the registration to ITS own context, not
-   * the caller's, so the entries outlive this channel unless released: after a
-   * launcher recompose the stale registrations would still answer, but the
-   * fresh channel would see the names taken and stop managing them, freezing
-   * the menu. The plugin calls this from its teardown effect, where the real
-   * cordis context lives.
+   * Skill commands are registered in the current Agent's scoped command
+   * layer. Releasing the Channel removes those entries and every event/timer
+   * subscription owned by this projection.
    */
   releaseContributions(): void
   /**
@@ -746,7 +754,7 @@ export interface EffortOption {
   description?: string
 }
 
-export interface ChannelState {
+export interface ChannelState extends PublicChannel {
   version: number
   rows: ChatRow[]
   status: AgentStatus | 'starting' | 'disposed'
@@ -757,6 +765,8 @@ export interface ChannelState {
   tokens: TokenUsage
   cwd: string
   displayCwd: string
+  homeDir: string
+  pathCaseInsensitive: boolean
   gitBranch: string | undefined
   working: boolean
   spinnerMode: SpinnerMode
@@ -844,12 +854,12 @@ export interface ChannelState {
   resumeTo(sessionId: string): Promise<boolean>
   /** Start a fresh conversation (`/new`). */
   newSession(): Promise<boolean>
-  listWorkspaces(): Promise<readonly TuiWorkspaceTarget[]>
-  resolveWorkspace(uri: string): Promise<TuiWorkspaceTarget | undefined>
-  switchWorkspace(target: TuiWorkspaceTarget): Promise<boolean>
+  listWorkspaces(): Promise<readonly WorkspaceTarget[]>
+  resolveWorkspace(uri: string): Promise<WorkspaceTarget | undefined>
+  switchWorkspace(target: WorkspaceTarget): Promise<boolean>
   renameWorkspace(title: string): Promise<boolean>
-  workspaceCommands(): readonly Pick<TuiWorkspaceCommand, 'name' | 'aliases' | 'description'>[]
-  runWorkspaceCommand(name: string, input: string): Promise<TuiWorkspaceCommandResult | undefined>
+  workspaceCommands(): readonly Pick<WorkspaceCommand, 'name' | 'aliases' | 'description'>[]
+  runWorkspaceCommand(name: string, input: string): Promise<WorkspaceCommandResult | undefined>
   /** Switch the live model (`/model` picker). */
   switchModel(provider: string, model: string): Promise<boolean>
   /** The route's effort levels for `/effort` (see the public Channel type). */
@@ -869,8 +879,9 @@ export interface ChannelState {
   /** Switch the agent preset (see the public Channel type). */
   switchPreset(presetId: string): Promise<boolean>
   clear(): void
+  readonly hasOlder?: boolean
   /** @internal older-row restoration (see the public Channel.loadOlder). */
-  loadOlder(): number
+  loadOlder(): number | Promise<number>
   notify(text: string, options?: { color?: NotificationItem['color']; timeoutMs?: number }): () => void
   /** Switch the working-activity indicator preset (see the public Channel). */
   setActivityFrames(name: string): boolean
@@ -905,9 +916,11 @@ export interface ChannelState {
   /** MCP server/tool status for /mcp: one line per server, or setup guidance. */
   mcpStatus(): string[]
   /** Export the transcript to a markdown file (CC's /export). */
-  exportSession(): string | null
+  exportSession(): string | null | Promise<string | null>
   /** Create `AGENTS.md` in the session cwd (CC's /init). */
-  initWorkspace(): string | null
+  initWorkspace(): string | null | Promise<string | null>
+  /** Profile configuration paths and launch hints (CC's /config). */
+  configInfo(): string[]
   /** Environment diagnostics (CC's /doctor). */
   doctorInfo(): string[]
   /** Plugin diagnostics (/plugins); see the public Channel type. */
@@ -1195,6 +1208,8 @@ export function createChannel(
     /** Edit/Write diff presentation; default `auto` (side-by-side ≥110
      *  columns, unified below). */
     diffLayout?: 'auto' | 'split' | 'unified'
+    /** Isolate the selected plugin Scene for one daemon-side Channel. */
+    isolatedScenes?: boolean
     /** Show the segmented context bar row in the status footer; default on
      *  (cordis.yml `contextBar: false` hides it, issue #29). */
     contextBar?: boolean
@@ -1212,11 +1227,25 @@ export function createChannel(
     /** Shift+Tab session-mode cycle from cordis.yml `modes`; undefined →
      *  the built-in default/plan/full cycle (sessionModes.ts). */
     modes?: readonly SessionModeSpec[]
+    /** Language requested by the terminal rendering this Channel. */
+    locale?: Lang
     /** Handle of the initial agent; disposed when a rewind replaces it. */
     handle?: AgentHandle
   },
 ): ChannelState {
+  const t: typeof activeTranslation = options.locale === undefined
+    ? activeTranslation
+    : (key, params) => translate(options.locale as Lang, key, params)
   let agent = initialAgent
+  let ownedSessionIds = new Set([String(initialAgent.session.id)])
+  const ownsAgent = (subject: Agent): boolean => {
+    const sessionId = String(subject.session.id)
+    if (ownedSessionIds.has(sessionId)) return true
+    const parentSession = subject.session.header.parentSession
+    if (parentSession === undefined || !ownedSessionIds.has(String(parentSession))) return false
+    ownedSessionIds.add(sessionId)
+    return true
+  }
   let currentHandle: AgentHandle | undefined = options.handle
   // D-7 backstop: the extensions row installs the decision-subscription
   // gate, but the channel IS the dispatch path — a stale patch without that
@@ -1263,6 +1292,8 @@ export function createChannel(
   // absent the row, unknown plugin event types stay invisible in the
   // transcript, exactly as before the seam existed.
   const rendererRuntime = ctx.get('tuiRenderers') as TuiRendererRuntime | undefined
+  const isolatedSceneSelection = options.isolatedScenes ? sceneRuntime?.createSelection() : undefined
+  const sceneSelection: TuiSceneSelection | undefined = isolatedSceneSelection ?? sceneRuntime
   // Shift+Tab session-mode cycle: cordis.yml `modes` wins; absent/empty/
   // atom-less → the built-in default/plan/full cycle (sessionModes.ts).
   const { modes: sessionModes, dropped: droppedModeIds } = resolveSessionModes(options.modes)
@@ -1272,6 +1303,12 @@ export function createChannel(
     )
   }
   const listeners = new Set<() => void>()
+  const lifetimeDisposers: Array<() => unknown> = []
+  let released = false
+  const own = <T extends () => unknown>(dispose: T): T => {
+    lifetimeDisposers.push(dispose)
+    return dispose
+  }
   /** True while a frame-aligned stream notification is pending (emitStream). */
   let streamNotifyScheduled = false
   let nextNotificationId = 1
@@ -1696,11 +1733,12 @@ export function createChannel(
       return t('command-invoke-denied-owner', { name, owner: owner.componentId })
     }
     try {
-      const execution = await commandService.execute(
-        agent,
-        `/${name}${rawInput}`,
-        new AbortController().signal,
+      const execute = () => commandService.execute(
+        agent, `/${name}${rawInput}`, new AbortController().signal,
       )
+      const execution = isolatedSceneSelection === undefined || sceneRuntime === undefined
+        ? await execute()
+        : await sceneRuntime.runWith(isolatedSceneSelection, execute)
       // `undefined` = not registered; a handler error surfaces as its
       // message so the user sees why the command failed.
       return execution?.result.text ?? ''
@@ -1802,7 +1840,7 @@ export function createChannel(
       }
     }
     refreshMode()
-    state.notify(t('mode-switched', { name: modeDisplayName(state.mode) }))
+    state.notify(t('mode-switched', { name: modeDisplayName(state.mode, key => t(key)) }))
     state.emit()
   }
 
@@ -1825,6 +1863,8 @@ export function createChannel(
     tokens: { input: 0, output: 0 },
     cwd: options.cwd,
     displayCwd: workspaceService.describe(options.cwd).description ?? options.cwd,
+    homeDir: homeDir(),
+    pathCaseInsensitive: process.platform === 'win32',
     gitBranch: undefined,
     working: false,
     spinnerMode: 'requesting',
@@ -2539,7 +2579,7 @@ export function createChannel(
     resolveWorkspace(uri: string) {
       return workspaceService.resolve(uri, state.cwd)
     },
-    async switchWorkspace(target: TuiWorkspaceTarget): Promise<boolean> {
+    async switchWorkspace(target: WorkspaceTarget): Promise<boolean> {
       if (state.working) {
         state.notify(t('workspace-switch-working'), { color: 'warning' })
         return false
@@ -3259,12 +3299,12 @@ export function createChannel(
     runExternalCommand(name, rawInput) {
       return executeRegistryCommand(name, rawInput)
     },
-    pluginScene: sceneRuntime?.active,
+    pluginScene: sceneSelection?.active,
     openPluginScene(id: string) {
-      return sceneRuntime?.open(id) ?? false
+      return sceneSelection?.open(id) ?? false
     },
     closePluginScene() {
-      sceneRuntime?.close()
+      sceneSelection?.close()
     },
     pushLocal(title, lines) {
       state.rows.push({ id: nextRowId++, kind: 'local', text: title })
@@ -3391,6 +3431,15 @@ export function createChannel(
         return null
       }
     },
+    configInfo() {
+      return [
+        t('doctor-example-config', { path: 'dsh --profile dsh-tui' }),
+        t('doctor-user-config', { path: join(homeDir(), '.dsh/profiles/dsh-tui/cordis.patch.yml') }),
+        '',
+        t('doctor-launch-hint'),
+        t('doctor-route-hint'),
+      ]
+    },
     doctorInfo() {
       const lines: string[] = []
       lines.push(`Node ${process.version} · ${process.platform} ${process.arch}`)
@@ -3467,8 +3516,16 @@ export function createChannel(
       }
     },
     releaseContributions() {
+      if (released) return
+      released = true
       releaseSkillCommands()
       unsubscribeScenes?.()
+      isolatedSceneSelection?.dispose()
+      for (const dispose of agentSubscriptions) dispose()
+      agentSubscriptions = []
+      stopActivityTick()
+      for (const dispose of lifetimeDisposers.splice(0).reverse()) dispose()
+      listeners.clear()
     },
     traceEvents() {
       // Immutable per-append snapshot (dsh-session caches the frozen array);
@@ -3487,6 +3544,7 @@ export function createChannel(
    * for a previous agent is discarded (swaps rebind `agent` mid-flight).
    */
   const refreshLoadedContext = async (): Promise<void> => {
+    if (released) return
     const target = agent
     const sections: LoadedContextEntry[] = []
     const contexts: LoadedContextEntry[] = []
@@ -3497,7 +3555,7 @@ export function createChannel(
       const systemPrompt = ctx.get('systemPrompt')
       if (systemPrompt !== undefined) {
         const assembly = await systemPrompt.assemble(assembleContextFor(target))
-        if (target !== agent) return
+        if (released || target !== agent) return
         // Render each section through the shared strict interpolator with
         // this assembly's variables (renderPrompt joins; a single-section
         // assembly renders exactly one section), keeping non-empty results.
@@ -3520,7 +3578,7 @@ export function createChannel(
         maxBytes: 1024 * 1024,
         maxSourceBytes: 1024 * 1024,
       }, ctx.get('fs'))
-      if (target !== agent) return
+      if (released || target !== agent) return
       const instructionSources = renderedInstructions as (typeof renderedInstructions & {
         represented?: readonly { displayPath: string }[]
       })
@@ -3539,7 +3597,7 @@ export function createChannel(
       }>(ctx, target, 'skills')
       if (skillsService !== undefined) {
         const catalog = await skillsService.list({})
-        if (target !== agent) return
+        if (released || target !== agent) return
         skills.push(...catalog.map(skill => ({
           name: skill.name,
           description: skill.description,
@@ -3549,6 +3607,7 @@ export function createChannel(
       ctx.logger.warn('loaded-context snapshot failed: %o', error)
       return
     }
+    if (released) return
     state.loadedContext = { sections, contexts, files, skills, tools }
     state.emit()
   }
@@ -3577,6 +3636,7 @@ export function createChannel(
    */
   let lastGoodSkills: { agent: Agent; commands: LocalCommand[] } | undefined
   const refreshCommandList = (): void => {
+    if (released) return
     const target = agent
     const token = ++commandListSeq
     const merged: LocalCommand[] = [...LOCAL_COMMANDS]
@@ -3630,7 +3690,7 @@ export function createChannel(
       scope: target,
       cwd: (target.session as { header?: { cwd?: string } }).header?.cwd ?? state.cwd,
     }).then((observation) => {
-      if (token !== commandListSeq || target !== agent) return
+      if (released || token !== commandListSeq || target !== agent) return
       if (!observation.complete) {
         // Incomplete (provider failure/rescan mid-flight): NOT authoritative
         // — never clear last-good or repopulate from the partial catalog.
@@ -3657,15 +3717,15 @@ export function createChannel(
       // A superseded read (a newer refresh or an agent swap beat it) says
       // nothing about the live menu: stay silent instead of logging a
       // misleading failure warning.
-      if (token !== commandListSeq || target !== agent) return
+      if (released || token !== commandListSeq || target !== agent) return
       ctx.logger.warn('skill command merge failed: %o', error)
       // Last-good: a transient provider failure (rescan error, permission
       // hiccup) must not make known skills vanish from completion.
       restoreLastGood()
     })
   }
-  ctx.on('commands/change', refreshCommandList)
-  ctx.on('skills/change', refreshCommandList)
+  own(ctx.on('commands/change', refreshCommandList))
+  own(ctx.on('skills/change', refreshCommandList))
 
   /**
    * The view a skill-catalog read must be taken through, as ONE value.
@@ -3702,6 +3762,8 @@ export function createChannel(
   const skillCommands = new Map<string, { dispose: () => void; description: string }>()
   /** Skill names the registry refused (name taken, or invalid) — warn once. */
   const skillCommandsRefused = new Set<string>()
+  /** Latest real-command catalog read; older async observations are inert. */
+  let skillCommandsSeq = 0
   /** Pending re-read after an incomplete catalog observation. */
   let skillCommandsRetry: ReturnType<typeof setTimeout> | undefined
 
@@ -3724,25 +3786,35 @@ export function createChannel(
    * discovery alone would honor half the flag.
    */
   const refreshSkillCommands = async (): Promise<void> => {
-    if (commandService === undefined) return
+    if (released || commandService === undefined) return
     const target = agent
+    const token = ++skillCommandsSeq
     const registry = skillRegistryFor(target)
     if (registry === undefined) return
     let observation
     try {
       observation = await registry.snapshot(skillViewOptions(target))
     } catch (error) {
+      if (released || token !== skillCommandsSeq || target !== agent) return
       ctx.logger.warn('skill commands: catalog read failed: %o', error)
       return
     }
-    if (target !== agent) return
+    if (released || token !== skillCommandsSeq || target !== agent) return
     // A provider still warming its watcher reports an incomplete observation;
-    // re-read once so a cold start cannot leave the menu permanently short.
-    if (!observation.complete && skillCommandsRetry === undefined) {
-      skillCommandsRetry = setTimeout(() => {
-        skillCommandsRetry = undefined
-        void refreshSkillCommands()
-      }, SKILL_COMMAND_RETRY_MS)
+    // retain the last complete registration set and re-read once so a cold
+    // start cannot leave the command catalog permanently short.
+    if (!observation.complete) {
+      if (skillCommandsRetry === undefined) {
+        skillCommandsRetry = setTimeout(() => {
+          skillCommandsRetry = undefined
+          void refreshSkillCommands()
+        }, SKILL_COMMAND_RETRY_MS)
+      }
+      return
+    }
+    if (skillCommandsRetry !== undefined) {
+      clearTimeout(skillCommandsRetry)
+      skillCommandsRetry = undefined
     }
     const wanted = new Map<string, string>(
       observation.skills
@@ -3766,7 +3838,7 @@ export function createChannel(
       // Another plugin already owns this name (plan/goal/…): leave it alone.
       if (commandService.find(target, name) !== undefined) continue
       try {
-        const dispose = commandService.register({
+        const dispose = target.ctx.commands.register({
           name,
           description,
           // The invocation line is re-submitted as a user message (kernel
@@ -3832,30 +3904,31 @@ export function createChannel(
       }
     }
   }
-  ctx.on('skills/change', () => {
+  own(ctx.on('skills/change', () => {
     void refreshSkillCommands()
-  })
+  }))
   /**
    * Mirror the scene runtime's active scene into channel state, so screens
    * swap to it through the ordinary version-bump re-render instead of a
    * second subscription channel.
    */
-  const unsubscribeScenes = sceneRuntime?.subscribe(() => {
-    if (state.pluginScene === sceneRuntime.active) return
-    state.pluginScene = sceneRuntime.active
+  const unsubscribeScenes = sceneSelection?.subscribe(() => {
+    if (state.pluginScene === sceneSelection.active) return
+    state.pluginScene = sceneSelection.active
     state.emit()
   })
   /** See {@link Channel.releaseContributions}. */
   const releaseSkillCommands = (): void => {
+    skillCommandsSeq += 1
     if (skillCommandsRetry !== undefined) clearTimeout(skillCommandsRetry)
     skillCommandsRetry = undefined
     for (const entry of skillCommands.values()) entry.dispose()
     skillCommands.clear()
+    skillCommandsRefused.clear()
   }
 
   refreshCommandList()
   void refreshLoadedContext()
-  void refreshSkillCommands()
 
   let nextRowId = 0
   /** The leaf's bash executor (dsh-bash-local in the example leaf) — the DSH
@@ -4543,6 +4616,8 @@ ${output}
   }
 
   const bindAgent = (): void => {
+    releaseSkillCommands()
+    ownedSessionIds = new Set([String(agent.session.id)])
     for (const dispose of agentSubscriptions) dispose()
     stopActivityTick()
     activityTracker = new ActivityTracker({
@@ -4659,7 +4734,8 @@ ${output}
   // headers. Their child scopes do not share this channel's per-agent
   // ModelSelectionRef, so fill an otherwise incomplete first request from
   // the active route. Keep complete child-specific routes authoritative.
-  ctx.on('agent/request', async (_payload, next) => {
+  own(ctx.on('agent/request', async ({ agent: subject }, next) => {
+    if (!ownsAgent(subject)) return next()
     const resolved = await next()
     if (
       typeof resolved.provider === 'string' && resolved.provider.length > 0 &&
@@ -4672,14 +4748,23 @@ ${output}
       provider: state.provider,
       model: state.model,
     }
-  })
+  }))
   bindAgent()
+  // bindAgent starts by retiring registrations owned by the previous agent.
+  // The initial catalog read must therefore begin after that boundary, just
+  // like the explicit refreshes following rewind/resume/new/model swaps.
+  void refreshSkillCommands()
   // Cordis owns the Channel lifetime. Rebinding handles the common case;
   // this effect closes the final timer when the Channel's context unloads.
   const effect = (ctx as Context & {
     effect?: (setup: () => () => void, label?: string) => void
   }).effect
-  effect?.call(ctx, () => () => { stopActivityTick() }, 'dsh-tui activity timer')
+  const disposeChannelLifetime = effect?.call(
+    ctx,
+    () => () => { state.releaseContributions() },
+    'dsh-tui channel lifetime',
+  ) as (() => unknown) | undefined
+  if (disposeChannelLifetime !== undefined) own(disposeChannelLifetime)
   // Statusline breadcrumb: current git branch of the session cwd (best-effort).
   // Re-run when an agent swap adopts a different persisted cwd (/resume,
   // issue #96) so the breadcrumb never shows the previous workspace's branch.
@@ -4759,11 +4844,12 @@ export function sessionCwdMatches(
   stateCwd: string,
   headerCwd: string,
   caseInsensitive: boolean = process.platform === 'win32',
+  authorityHome: string = homeDir(),
 ): boolean {
   const cwd = normalizeCwd(stateCwd, caseInsensitive)
   const recorded = normalizeCwd(headerCwd, caseInsensitive)
   if (recorded === '' || cwd === '') return false
-  const home = normalizeCwd(homeDir(), caseInsensitive)
+  const home = normalizeCwd(authorityHome, caseInsensitive)
   // Paths below arrive backslash-normalized (`\\server\share` →
   // `//server/share`, `\\?\C:\` → `//?/C:`), trailing slashes stripped.
   const isContainer = (path: string): boolean =>

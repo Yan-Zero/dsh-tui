@@ -1,11 +1,9 @@
 packages:
-  - 'vendor/dsh-std/packages/core'
-  - 'vendor/dsh-std/packages/manifest'
-  - 'vendor/dsh-std/packages/connection'
-  - 'vendor/dsh-std/packages/presentation'
-  - 'vendor/dsh-std/packages/command'
-  - 'vendor/dsh-std/packages/storage'
-  - 'vendor/dsh-std/packages/messages'
+  - ecosystem-spec
+  - vendor/dsh-std
+  - vendor/dsh-std/packages/*
+
+nodeLinker: hoisted
 
 allowBuilds:
   esbuild: false

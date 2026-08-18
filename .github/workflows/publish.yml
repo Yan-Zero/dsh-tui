@@ -19,6 +19,10 @@ jobs:
       DSH_TUI_LANG: zh
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The package builds against dsh-tui's top-level dsh-std checkout;
+          # ecosystem-spec's nested fallback is not part of this workspace.
+          submodules: true
 
       - uses: pnpm/action-setup@v4
         with:
@@ -36,7 +40,7 @@ jobs:
 
       - name: Verify clean compile output
         run: |
-          test -f lib/types/index.js
+          test -f lib/types/dsh-adapter/index.js
           test -f lib/types/dsh-adapter/invariant.js
 
       - run: pnpm verify:build
