@@ -58,6 +58,7 @@ function makeDeps(script, options = {}) {
     notifications: [],
     pushed: [],
     switches: [],
+    commits: [],
     asks: [],
     /** question id → hideCustomInput flag as submitted (panel contract). */
     hideFlags: {},
@@ -86,6 +87,12 @@ function makeDeps(script, options = {}) {
       if (options.profileThrows) throw new Error('settings-rejected: unserviceable')
       calls.profiles.push([route, profile])
     },
+    ...(options.atomicCommit ? {
+      commitProvider: async request => {
+        calls.commits.push(request)
+        if (options.commitThrows) throw new Error('remote atomic commit rejected')
+      },
+    } : {}),
   }
   const deps = {
     host,
@@ -407,6 +414,32 @@ const KEEP_MODEL = { selected: [t('provider-opt-switch-keep')] }
       'switch': true,
     }),
     JSON.stringify(custom.calls.hideFlags))
+}
+
+// 13. Remote backends may own the credential + settings transaction. The
+// wizard must hand over one complete request and avoid local partial writes.
+{
+  const { deps, calls } = makeDeps({
+    'mode': MODE_CATALOG,
+    'catalog': { selected: ['deepseek'] },
+    'apikey': { custom: 'sk-remote' },
+    'baseurl-choice': SKIP_BASEURL,
+    'models': { selected: ['deepseek-chat'] },
+    'confirm': CONFIRM_WRITE,
+    'switch': KEEP_MODEL,
+  }, {
+    discovered: [{ id: 'deepseek-chat' }],
+    atomicCommit: true,
+  })
+  const outcome = await runProviderWizard(deps)
+  check('13 atomic commit: outcome added', outcome === 'added', outcome)
+  check('13 atomic commit: one complete request, no local partial writes',
+    calls.commits.length === 1
+      && calls.commits[0]?.route === 'deepseek'
+      && calls.commits[0]?.credential?.ref === 'DEEPSEEK_API_KEY'
+      && eq(calls.credentials, [])
+      && eq(calls.profiles, []),
+    JSON.stringify(calls))
 }
 
 console.log(failed === 0 ? '\nAll provider-wizard checks passed' : `\n${failed} check(s) FAILED`)

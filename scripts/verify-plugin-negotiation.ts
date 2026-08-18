@@ -21,6 +21,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { DECISION_EVENTS } from 'dsh-ecosystem-spec/protocols'
 
 // ── 隔离 HOME（必须先于任何 src 导入）─────────────────────────────────────
 const fakeHome = mkdtempSync(join(tmpdir(), 'dsh-plugin-negotiation-home-'))
@@ -208,7 +209,7 @@ const overview = () => pluginsInfoLines('', { grants, host })
   check1('a host without DecisionEvents rejects the required private protocol',
     unavailable.some(line => line.includes('rejected')
       && line.includes('REQUIRED_PROTOCOL_UNAVAILABLE')
-      && line.includes('tui.dsh/v1alpha1#DecisionEvents')), unavailable.join(' | '))
+      && line.includes(`${DECISION_EVENTS.apiVersion}#${DECISION_EVENTS.kind}`)), unavailable.join(' | '))
   // 遵循文档的插件：声明 session.input.intercept 并订阅 tui/input——
   // vendored 核心面答不出（schema 枚举仅 4 个核心权限名、registry 无
   // tui/* 条目），必须走 TUI 扩展覆盖层，且输出要如实声明这一点。
@@ -220,7 +221,7 @@ const overview = () => pluginsInfoLines('', { grants, host })
     version: '0.1.0',
     manifestVersion: '0.15',
     facets: { host: { entry: 'dist/main.js', apiVersion: 'v1alpha1' } },
-    requires: { contracts: [{ apiVersion: 'tui.dsh/v1alpha1', kind: 'DecisionEvents' }] },
+    requires: { contracts: [DECISION_EVENTS] },
     permissions: [{ name: 'session.input.intercept', scope: 'tui/input', reason: 'guard user input' }],
     contributes: { commands: [] },
     subscriptions: [],

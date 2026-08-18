@@ -20,8 +20,8 @@ import {
   type BrowserFilters,
 } from '../sessions/view.js'
 import { t } from '../i18n.js'
-import type { Channel } from '../dsh-adapter/channel.js'
-import type { PreviewEntry, SessionSummary } from '../dsh-adapter/sessions/index.js'
+import type { Channel } from '../tui-contract/channel.js'
+import type { PreviewEntry, SessionSummary } from '../tui-contract/sessions.js'
 
 /** What the browser is doing with the focused row. */
 type BrowserMode = 'list' | 'confirm-delete' | 'rename' | 'confirm-clean'

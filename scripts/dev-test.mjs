@@ -112,7 +112,7 @@ try {
   for (const file of [
     'bin/dsh-tui.js',
     'cordis.patch.yml',
-    'lib/types/index.js',
+    'lib/types/dsh-adapter/index.js',
   ]) {
     assertSameFile(join(repoRoot, file), join(installed, file))
   }

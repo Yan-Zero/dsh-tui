@@ -308,7 +308,7 @@ const fileA = join(fakeHome, 'ledger-a.jsonl')
   check1('tuiShortcuts.register takes the optional identity param',
     identityParam('src/dsh-adapter/shortcuts.ts', 'options: TuiShortcutOptions'))
   check1('tuiScenes.register takes the optional identity param',
-    identityParam('src/dsh-adapter/scenes.ts', 'descriptor: TuiSceneDescriptor'))
+    identityParam('src/tui-runtime/scenes.ts', 'descriptor: TuiSceneDescriptor'))
   check1('tuiStatus.set takes the optional identity param',
     identityParam('src/dsh-adapter/status.ts', "text: string | number | boolean | undefined"))
   check1('tuiRenderers.register takes the optional identity param',

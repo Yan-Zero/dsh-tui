@@ -111,6 +111,8 @@ function makeChannel() {
     provider: 'deepseek',
     tokens: { input: 0, output: 0 },
     cwd: '/tmp',
+    homeDir: '/home/u',
+    pathCaseInsensitive: false,
     displayCwd: '/tmp',
     gitBranch: 'main',
     working: false,

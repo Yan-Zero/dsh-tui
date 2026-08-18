@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ComponentManifest, PluginManifest } from '@dsh-std/manifest'
 import { normalizePermissionScope, scopeCovers } from '../plugin-spec/permission-scope.js'
+import { DECISION_EVENTS_COORDINATE } from '../plugin-spec/tui-extension.js'
 
 export type ComponentIdentityErrorCode = 'COMPONENT_NOT_ADMITTED' | 'COMPONENT_ALREADY_ADMITTED'
 
@@ -136,5 +137,6 @@ export function declaresObserverScope(identity: VerifiedComponentIdentity, actua
 
 export function requiresDecisionEvents(identity: VerifiedComponentIdentity): boolean {
   return identity.manifest.requires.contracts.some(requirement =>
-    requirement.apiVersion === 'tui.dsh/v1alpha1' && requirement.kind === 'DecisionEvents')
+    requirement.apiVersion === DECISION_EVENTS_COORDINATE.apiVersion
+      && requirement.kind === DECISION_EVENTS_COORDINATE.kind)
 }

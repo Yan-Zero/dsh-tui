@@ -3,7 +3,7 @@ import { t } from '../i18n.js'
 import { Box, Text } from '../ui.js'
 import { Pane } from './design-system/Pane.js'
 import { HintLine } from './design-system/HintLine.js'
-import type { EffortOption } from '../dsh-adapter/channel.js'
+import type { EffortOption } from '../tui-contract/channel.js'
 
 /**
  * Reasoning-effort slider (`/effort`): a rheostat row of the live route's

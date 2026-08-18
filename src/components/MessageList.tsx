@@ -1,7 +1,7 @@
 import React from 'react'
 import { t } from '../i18n.js'
 import { Box, Text, useTerminalSize, type ScrollBoxHandle } from '../ui.js'
-import type { ChatRow, ToolRow, ToolCallView, ToolResultView } from '../dsh-adapter/channel.js'
+import type { ChatRow, ToolRow, ToolCallView, ToolResultView } from '../tui-contract/channel.js'
 import type { DOMElement } from '../ink/dom.js'
 import { Divider } from './design-system/Divider.js'
 import { UserPromptMessage } from './messages/UserPromptMessage.js'
@@ -51,6 +51,7 @@ export function MessageList({
   diffLayout = 'auto',
   showAll,
   onToggleAll,
+  hasOlder = false,
   onLoadOlder,
   thinkingVisible = true,
   registerRowRef,
@@ -71,6 +72,8 @@ export function MessageList({
   diffLayout?: 'auto' | 'split' | 'unified'
   showAll: boolean
   onToggleAll: () => void
+  /** The backing client has an older server-side history page. */
+  hasOlder?: boolean
   /** Restore folded-away older rows from the session log (CC-style "load
    *  earlier messages" affordance; shown only when rows were folded). */
   onLoadOlder?: () => void
@@ -310,7 +313,7 @@ export function MessageList({
 
   return (
     <>
-      {rows.some(row => row.folded) && (
+      {(hasOlder || rows.some(row => row.folded)) && (
         <Box marginTop={1} onClick={onLoadOlder}>
           <Divider title={t('load-earlier')} />
         </Box>

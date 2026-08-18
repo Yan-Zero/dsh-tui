@@ -4,7 +4,7 @@ import { Box, Text } from '../ui.js'
 import { Pane } from './design-system/Pane.js'
 import { Select } from './Select.js'
 import { HintLine } from './design-system/HintLine.js'
-import type { PresetOption } from '../dsh-adapter/channel.js'
+import type { PresetOption } from '../tui-contract/channel.js'
 
 /**
  * Agent-preset picker (issue #8) in the CC ModelPicker style — same chrome

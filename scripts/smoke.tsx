@@ -19,12 +19,12 @@ const [{ PassThrough, Writable }, { resolve }, { Context }, React, { render }, {
   import('../src/dsh-adapter/questions.js'),
   import('../src/dsh-adapter/approvals.js'),
   import('@deepseek-ai/dsh-user-questions'),
-  import('../src/workspaces.js'),
+  import('../src/tui-runtime/workspaces.js'),
   import('../src/commands.js'),
   import('../src/utils/modifiers.js'),
 ])
 
-const commandTreeModule = await import('../src/command-trees.js')
+const commandTreeModule = await import('../src/tui-runtime/command-trees.js')
 const i18nModule = await import('../src/i18n.js')
 const commandTreeCtx = new Context()
 await commandTreeCtx.plugin(commandTreeModule.default).await()
@@ -72,7 +72,7 @@ await commandTreeCtx.fiber.dispose()
 // Settings-sections seam (issue #165): the registry validates + dedupes
 // namespaces, notifies subscribers on register/unregister, and the React-free
 // SettingsForm turns staged drafts into revision-fenced mutate ops.
-const settingsSectionsModule = await import('../src/settings-sections.js')
+const settingsSectionsModule = await import('../src/tui-runtime/settings-sections.js')
 const settingsEditorModule = await import('../src/dsh-adapter/settingsEditor.js')
 const settingsCtx = new Context()
 await settingsCtx.plugin(settingsSectionsModule.default).await()
@@ -214,7 +214,7 @@ await settingsCtx.fiber.dispose()
 // Plugin scene seam: registration validates and dedupes ids, open/close
 // drive the subscribe feed exactly once per transition, and disposing the
 // open scene closes it instead of stranding the user on a dead screen.
-const scenesModule = await import('../src/scenes.js')
+const scenesModule = await import('../src/tui-runtime/scenes.js')
 const sceneCtx = new Context()
 await sceneCtx.plugin(scenesModule.default).await()
 const sceneRuntime = sceneCtx.tuiScenes

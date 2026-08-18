@@ -41,7 +41,7 @@ jobs:
 
       - name: Verify clean compile output
         run: |
-          test -f lib/types/index.js
+          test -f lib/types/dsh-adapter/index.js
           test -f lib/types/dsh-adapter/invariant.js
 
       - run: pnpm verify:build

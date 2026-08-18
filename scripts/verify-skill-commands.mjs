@@ -44,7 +44,10 @@ const commandService = {
     if (registered.has(descriptor.name)) throw new Error(`duplicate command: ${descriptor.name}`)
     registered.set(descriptor.name, descriptor)
     fire('commands/change')
-    return () => { registered.delete(descriptor.name) }
+    return () => {
+      registered.delete(descriptor.name)
+      fire('commands/change')
+    }
   },
 }
 
@@ -77,7 +80,7 @@ const agent = {
   session: { id: 's1', seq: 0, events: [] },
   // bindAgent 挂 installModelSelection 需要 agent.ctx 提供"可订阅、返回
   // 解除函数"的最小面（0.3.6 Shift+Tab 推理等级）。
-  ctx: { on: () => () => {} },
+  ctx: { on: () => () => {}, commands: commandService },
   /** Messages the skill handler injected. */
   followups: [],
   followup(message) { this.followups.push(message) },
@@ -225,13 +228,21 @@ await tick()
   ctx.logger = { warn() { staleWarned += 1 } }
   fire('skills/change') // read A: pending, superseded by B below
   fire('skills/change') // read B: wins the token race
-  pending[1].resolve({
+  // Each invalidation starts two independent reads: completion-menu merge,
+  // then real command registration. Resolve both reads from B and reject both
+  // stale reads from A after the live state has settled.
+  pending[2].resolve({
+    skills: [{ name: 'live', description: 'Live skill', invocation: { modelInvocable: true, userInvocable: true } }],
+    complete: true,
+  })
+  pending[3].resolve({
     skills: [{ name: 'live', description: 'Live skill', invocation: { modelInvocable: true, userInvocable: true } }],
     complete: true,
   })
   await tick()
   check('superseding read repopulates the menu', channel.commandList.some(command => command.name === 'live'))
   pending[0].reject(new Error('stale scan failed'))
+  pending[1].reject(new Error('stale registration scan failed'))
   await tick()
   check('stale read failure logs no warning', staleWarned === 0, `warned=${staleWarned}`)
   check(

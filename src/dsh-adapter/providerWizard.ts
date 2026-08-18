@@ -23,7 +23,8 @@ import {
   type AskUserQuestionItem,
   type AskUserQuestionRequest,
 } from '@deepseek-ai/dsh-user-questions'
-import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-llm'
+import type { ProviderDiscoveredModel, ProviderSetupHost } from '../tui-contract/provider-setup.js'
+export type { CatalogProviderCandidate, ProviderDiscoveredModel, ProviderSetupHost } from '../tui-contract/provider-setup.js'
 
 /** Route id rule shared with the dsh configuration surface (web Models page). */
 export const PROVIDER_ROUTE_ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
@@ -41,49 +42,6 @@ export const PROVIDER_PROTOCOLS = [
  */
 export function deriveKeyRef(route: string): string {
   return `${route.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_API_KEY`
-}
-
-/** One catalog route the mounted adapters offer for activation. */
-export interface CatalogProviderCandidate {
-  readonly provider: string
-  readonly displayName: string
-}
-
-/**
- * Runtime capabilities the wizard needs, implemented by the channel over
- * `ctx.settings` / `ctx.credentials` / `ctx.llm`. `undefined` from
- * `channel.providerSetup()` means the bare cordis.yml start (no dsh-base
- * services) and the command refuses to run.
- */
-export interface ProviderSetupHost {
-  /** Catalog routes activatable via the `llm-pi-ai` settings section. */
-  listCatalogProviders(): readonly CatalogProviderCandidate[]
-  /** Whether a profile (any layer) already exists for the route. */
-  routeExists(route: string): boolean
-  /** Interrogate a draft endpoint; the draft key is never persisted. */
-  discoverModels(request: {
-    provider?: string
-    baseURL?: string
-    api?: string
-    apiKey?: string
-  }): Promise<readonly LlmDiscoveredModel[]>
-  /** Whether the process environment already provides this ref (shadow). */
-  envShadows(ref: string): boolean
-  /**
-   * Read the currently stored value for rollback purposes; undefined when no
-   * credential exists under the ref. Only called when {@link envShadows} is
-   * false, so the value comes from a writable/seeded store, never the env.
-   */
-  readCredential(ref: string): Promise<string | undefined>
-  /** Persist the key under the ref; rejects when env-shadowed or invalid. */
-  writeCredential(ref: string, value: string): void | Promise<void>
-  /** Best-effort rollback of a just-written credential. */
-  removeCredential(ref: string): void | Promise<void>
-  /**
-   * Persist the provider profile under `llm-pi-ai.providers.<route>`;
-   * rejects when the adapter's validation deems it unserviceable.
-   */
-  writeProfile(route: string, profile: Record<string, unknown>): Promise<void>
 }
 
 export interface ProviderWizardDeps {
@@ -172,7 +130,7 @@ export async function runProviderWizard(
     // ── 2. route ───────────────────────────────────────────────────────
     let route = ''
     if (isCatalog) {
-      const candidates = host.listCatalogProviders()
+      const candidates = await host.listCatalogProviders()
       if (candidates.length > 0) {
         const otherLabel = t('provider-opt-other-route')
         const catalogAnswer = await ask({
@@ -243,7 +201,7 @@ export async function runProviderWizard(
 
     // ── 6. model selection ─────────────────────────────────────────────
     let models: string[] = []
-    let discoveredById = new Map<string, LlmDiscoveredModel>()
+    let discoveredById = new Map<string, ProviderDiscoveredModel>()
     if (discovered.length > 0) {
       discoveredById = new Map(discovered.map(model => [model.id, model] as const))
       const modelsAnswer = await ask({
@@ -282,11 +240,11 @@ export async function runProviderWizard(
 
     // ── 7. confirm ─────────────────────────────────────────────────────
     const ref = deriveKeyRef(route)
-    const shadowed = host.envShadows(ref)
+    const shadowed = await host.envShadows(ref)
     const summaryLines = buildSummaryLines({
       route, ref, shadowed, baseURL, api, models, isCatalog,
     })
-    const detail = host.routeExists(route)
+    const detail = await host.routeExists(route)
       ? `${summaryLines.join('\n')}\n${t('provider-route-exists-warning')}`
       : summaryLines.join('\n')
     const confirmAnswer = await ask({
@@ -301,9 +259,22 @@ export async function runProviderWizard(
     }
 
     // ── 8. persist: credential first (rollbackable), then the profile ──
+    const profile = buildProfile({ isCatalog, ref, baseURL, api, models, discoveredById })
     let wroteCredential = false
     let previousCredential: string | undefined
-    if (!shadowed) {
+    if (host.commitProvider !== undefined) {
+      try {
+        await host.commitProvider({
+          route,
+          profile,
+          ...shadowed ? {} : { credential: { ref, value: apiKey } },
+        })
+      } catch (error) {
+        const err = error instanceof Error ? error.message : String(error)
+        notify(t('provider-write-failed', { err }), { color: 'error', timeoutMs: 8000 })
+        return 'failed'
+      }
+    } else if (!shadowed) {
       // Capture any pre-existing value BEFORE overwriting: when the profile
       // write below fails, rollback must restore it — an unconditional unset
       // would destroy the old key of the route being overwritten.
@@ -311,9 +282,8 @@ export async function runProviderWizard(
       await host.writeCredential(ref, apiKey)
       wroteCredential = true
     }
-    const profile = buildProfile({ isCatalog, ref, baseURL, api, models, discoveredById })
     try {
-      await host.writeProfile(route, profile)
+      if (host.commitProvider === undefined) await host.writeProfile(route, profile)
     } catch (error) {
       if (wroteCredential) {
         try {
@@ -420,7 +390,7 @@ function buildProfile(input: {
   baseURL: string | undefined
   api: string | undefined
   models: readonly string[]
-  discoveredById: ReadonlyMap<string, LlmDiscoveredModel>
+  discoveredById: ReadonlyMap<string, ProviderDiscoveredModel>
 }): Record<string, unknown> {
   const profile: Record<string, unknown> = { apiKeyEnv: input.ref }
   if (input.baseURL !== undefined && input.baseURL !== '') profile['baseURL'] = input.baseURL

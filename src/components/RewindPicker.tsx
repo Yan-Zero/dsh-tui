@@ -1,8 +1,7 @@
 import React from 'react'
 import { t } from '../i18n.js'
 import { Box, Text, useTerminalSize } from '../ui.js'
-import type { ChatRow } from '../dsh-adapter/channel.js'
-import type { TuiRewindMode } from '../dsh-adapter/extension-events.js'
+import type { ChannelRewindMode, ChatRow } from '../tui-contract/channel.js'
 import { Pane } from './design-system/Pane.js'
 import { ListItem } from './design-system/ListItem.js'
 import { HintLine } from './design-system/HintLine.js'
@@ -31,7 +30,7 @@ export function RewindPicker({
   focusIndex: number
   confirmRow: ChatRow | null
   /** Plugin-offered rewind modes (tui/rewind-prompt); null = plain confirm. */
-  modes?: readonly TuiRewindMode[] | null
+  modes?: readonly ChannelRewindMode[] | null
   /** Focused option in the modes list (0 = conversation-only). */
   modeIndex?: number
   /** True while the plugin decision is in flight. */

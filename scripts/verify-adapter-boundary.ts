@@ -1,8 +1,8 @@
 /**
- * Enforce the adapter boundary: official `@deepseek-ai/*` imports are only
- * allowed inside src/dsh-adapter/. UI layers (screens/, components/, ink/,
- * hooks/, utils/, cc/, types/) talk to upstream exclusively through the
- * adapter tree, so an upstream rc bump breaks one module, not the UI.
+ * Enforce the Harness adapter boundary: `@deepseek-ai/dsh-*` imports are only
+ * allowed inside src/dsh-adapter/. Cordis is the implementation-neutral
+ * component container shared by the TUI runtime and its adapters, so its npm
+ * scope is not an architectural boundary.
  *
  * Run via `node --import tsx/esm scripts/verify-adapter-boundary.ts`.
  */
@@ -15,7 +15,7 @@ const ADAPTER = join(SRC, 'dsh-adapter')
 // side-effect imports, dynamic import(), require(), import.meta.resolve().
 // Plain text (comments, docs) mentioning the scope is NOT a violation.
 const OFFICIAL_SPECIFIER =
-  /(?:import|export)\s[^'"\n]*?from\s*['"]@deepseek-ai\/|import\s*['"]@deepseek-ai\/|(?:import\s*\(|require\s*\(|import\.meta\.resolve\s*\()\s*['"]@deepseek-ai\//u
+  /(?:import|export)\s[^'"\n]*?from\s*['"]@deepseek-ai\/(?!cordis(?:\/|['"]))|import\s*['"]@deepseek-ai\/(?!cordis(?:\/|['"]))|(?:import\s*\(|require\s*\(|import\.meta\.resolve\s*\()\s*['"]@deepseek-ai\/(?!cordis(?:\/|['"]))/u
 const SOURCE_GLOBS = ['.ts', '.tsx', '.d.ts']
 
 function collectSourceFiles(dir: string, out: string[]): void {
@@ -41,7 +41,7 @@ for (const file of files) {
   if (insideAdapter) continue
   const content = readFileSync(file, 'utf8')
   if (OFFICIAL_SPECIFIER.test(content)) {
-    violations.push(`${relative(SRC, file)} imports @deepseek-ai/* outside src/dsh-adapter/`)
+    violations.push(`${relative(SRC, file)} imports Harness APIs outside src/dsh-adapter/`)
   }
 }
 

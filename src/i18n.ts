@@ -178,13 +178,14 @@ const dict = {
   'workspace-uri-invalid': { zh: '无法解析工作区目标：{{uri}}', en: 'Cannot resolve workspace target: {{uri}}' },
   'workspace-uri-failed': { zh: '加载工作区失败 · {{err}}', en: 'Failed to load workspace · {{err}}' },
   'workspace-switch-working': { zh: 'Agent 运行中，无法切换工作区', en: 'Cannot switch workspaces while the agent is running' },
-  'workspace-open-invalid': { zh: '无法打开工作区：{target} 不是存在的目录', en: 'Cannot open workspace: {target} is not an existing directory' },
+  'workspace-open-invalid': { zh: '无法打开工作区：{{target}} 不是存在的目录', en: 'Cannot open workspace: {{target}} is not an existing directory' },
   'workspace-switched': { zh: '已切换工作区：{{target}}', en: 'Workspace switched: {{target}}' },
   'workspace-flow-hint': { zh: '**Enter** 选择 · Esc 退出', en: '**Enter** select · Esc to exit' },
   'workspace-flow-edit-hint': { zh: '**Enter** 选择当前目录 · Tab 手动输入路径 · Esc 退出', en: '**Enter** select current directory · Tab enter a path · Esc to exit' },
   'workspace-flow-input-hint': { zh: '输入绝对路径 · **Enter** 读取目录 · Esc 返回', en: 'Enter an absolute path · **Enter** load directory · Esc back' },
   'workspace-flow-input-empty': { zh: '目录路径不能为空', en: 'Directory path cannot be empty' },
   'workspace-flow-loading': { zh: '正在连接并读取目录… · Esc 关闭', en: 'Connecting and loading directories… · Esc to close' },
+  'workspace-flow-cancel': { zh: 'Esc 取消', en: 'Esc to cancel' },
   'workspace-command-usage': { zh: '用法：/workspace resume | rename <名称> | open <路径或 URI>{{commands}}', en: 'Usage: /workspace resume | rename <name> | open <path-or-URI>{{commands}}' },
   'workspace-open-usage': { zh: '用法：/workspace open <路径或 URI>', en: 'Usage: /workspace open <path-or-URI>' },
   'workspace-rename-usage': { zh: '用法：/workspace rename <名称>', en: 'Usage: /workspace rename <name>' },
@@ -481,8 +482,8 @@ const dict = {
     en: 'Command "/{{name}}" invocation denied — its owner plugin "{{owner}}" lost commands.invoke',
   },
   'plugins-check-tui-extension': {
-    zh: '注：该 manifest 依赖 TUI 宿主扩展面（tui.dsh/v1alpha1 DecisionEvents / session.*.intercept 权限），判定基于宿主扩展覆盖层而非 vendored 社区注册表。',
-    en: 'Note: this manifest relies on the TUI host-extension surface (tui.dsh/v1alpha1 DecisionEvents / session.*.intercept permissions); the verdict used the host extension overlay, not the vendored community registry.',
+    zh: '注：该 manifest 依赖 TUI 宿主扩展面（x-ccch1mneyyy.tui/v1alpha1 DecisionEvents / session.*.intercept 权限），判定基于宿主扩展覆盖层而非 vendored 社区注册表。',
+    en: 'Note: this manifest relies on the TUI host-extension surface (x-ccch1mneyyy.tui/v1alpha1 DecisionEvents / session.*.intercept permissions); the verdict used the host extension overlay, not the vendored community registry.',
   },
   // /plugins 诊断面（C-070 信任披露 + 协商诊断）
   'plugins-trust-banner': {
@@ -656,6 +657,9 @@ const dict = {
   'cmd-desc-status': { zh: '查看会话状态' },
   'cmd-desc-cost': { zh: '查看会话 token 用量' },
   'cmd-desc-config': { zh: '查看 dsh-tui 配置来源' },
+  'cmd-desc-scene': { zh: '按 id 打开插件场景', en: 'Open a plugin scene by id' },
+  'scene-usage': { zh: '用法：/scene <id>', en: 'Usage: /scene <id>' },
+  'scene-not-found': { zh: '没有名为「{{id}}」的可用插件场景', en: 'No available plugin scene is registered as "{{id}}"' },
   'cmd-desc-settings': { zh: '查看和编辑插件设置' },
   'cmd-desc-doctor': { zh: '运行环境检查' },
   'cmd-desc-init': { zh: '在工作目录创建 AGENTS.md' },
@@ -797,8 +801,13 @@ export function isLang(value: unknown): value is Lang {
  * @param params - Placeholder values.
  */
 export function t(key: I18nKey, params: I18nParams = {}): string {
+  return translate(activeLang, key, params)
+}
+
+/** Translate without changing the process-wide terminal language. */
+export function translate(lang: Lang, key: I18nKey, params: I18nParams = {}): string {
   const entry = dict[key] as { zh: string; en: string } | undefined
-  const template = entry?.[activeLang] ?? key
+  const template = entry?.[lang] ?? key
   return template.replace(/\{\{(\w+)\}\}/g, (match, name: string) =>
     name in params ? String(params[name]) : match,
   )

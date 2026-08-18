@@ -22,7 +22,7 @@ import { fileFacts } from './frames.js'
 import { classify, readHeader, type RawSessionHeader } from './header.js'
 import { findSessionLogFile } from '../compat/sessionLog.js'
 import { readIndex, writeIndex, type DerivedEntry, type SessionIndex } from './store.js'
-import type { SessionSummary } from './types.js'
+import type { SessionSummary } from '../../tui-contract/sessions.js'
 import { readLastUsed } from '../../sessionHistory.js'
 
 /**

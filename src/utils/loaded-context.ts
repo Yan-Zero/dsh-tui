@@ -1,4 +1,4 @@
-import type { LoadedContext } from '../dsh-adapter/channel.js'
+import type { LoadedContext } from '../tui-contract/channel.js'
 import { t } from '../i18n.js'
 
 /** Per-entry display cap: `/context` shows the beginning of long texts. */

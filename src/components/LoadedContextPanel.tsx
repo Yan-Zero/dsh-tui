@@ -1,7 +1,7 @@
 import React from 'react'
 import { t } from '../i18n.js'
 import { Box, Text } from '../ui.js'
-import type { LoadedContext } from '../dsh-adapter/channel.js'
+import type { LoadedContext } from '../tui-contract/channel.js'
 import { summarizeLoadedContext } from '../utils/loaded-context.js'
 
 /**

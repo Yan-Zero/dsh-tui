@@ -94,13 +94,11 @@ v0.15. The essentials:
   compatible` — a reference outside the registry is answered `unknown`, not
   `rejected` (unjudgeable is not the same as judged incompatible).
 
-What lives in this repository:
+Protocol and implementation boundaries:
 
-- `vendor/dsh-std/` — the pinned-revision official protocol packages
-  (manifest parser, projection, ProtocolCatalog, and contract validators).
-- `ecosystem-spec/` — the pinned admission-profile registry, schemas, and
-  conformance fixtures; `npm run verify:plugin-spec` checks profile hashes and
-  fixture drift.
+- `dsh-ecosystem-spec` — the TUI admission profile, private protocols,
+  registry, schemas, and conformance fixtures. It pins and carries the required
+  `dsh-std` revision.
 - `src/plugin-spec/` — the validation/negotiation layer: the official parser
   owns manifest shape, `validatePlugin`/`validateHost` own profile semantics,
   and five-state `negotiate` uses the same `ProtocolCatalog`.
